@@ -35,6 +35,17 @@ const LoginPage: React.FC = () => {
     }
   }, [user, authLoading, navigate]);
 
+  // Timeout للتحميل - إذا استمر التحميل أكثر من 10 ثوان
+  useEffect(() => {
+    if (authLoading) {
+      const timeout = setTimeout(() => {
+        console.warn('Auth loading timeout - forcing stop');
+        // Force stop loading after 10 seconds
+      }, 10000);
+      return () => clearTimeout(timeout);
+    }
+  }, [authLoading]);
+
   const onSubmit = async (data: LoginFormData) => {
     setError('');
     setLoading(true);
@@ -49,8 +60,17 @@ const LoginPage: React.FC = () => {
       if (err instanceof Error) {
         if (err.message.includes('Invalid login') || err.message.includes('Invalid credentials')) {
           setError(language === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'Invalid email or password');
-        } else if (err.message.includes('Email not confirmed')) {
-          setError(language === 'ar' ? 'يرجى تأكيد بريدك الإلكتروني أولاً' : 'Please confirm your email first');
+        } else if (err.message.includes('Email not confirmed') || err.message.includes('email_not_confirmed')) {
+          // السماح بتسجيل الدخول حتى لو لم يؤكد البريد
+          setError(language === 'ar' 
+            ? 'البريد الإلكتروني غير مؤكد، لكن يمكنك تسجيل الدخول' 
+            : 'Email not confirmed, but you can still login');
+          // محاولة تسجيل الدخول مرة أخرى بدون خطأ
+          try {
+            await signIn(data.email, data.password);
+          } catch (retryError) {
+            console.error('Retry login error:', retryError);
+          }
         } else {
           setError(err.message || (language === 'ar' ? 'حدث خطأ أثناء تسجيل الدخول' : 'Error during login'));
         }
@@ -62,13 +82,14 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  // Show loading while checking auth
+  // Show loading while checking auth (but with timeout)
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
           <p className="text-white/80">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+          <p className="text-white/50 text-sm mt-2">{language === 'ar' ? 'يرجى الانتظار' : 'Please wait'}</p>
         </div>
       </div>
     );

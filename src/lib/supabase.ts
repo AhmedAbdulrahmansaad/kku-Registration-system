@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { Course, Enrollment, Request, Notification } from '../types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://obffsqorwfudbnpxbecv.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9iZmZzcW9yd2Z1ZGJucHhiZWN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NDU0MTYsImV4cCI6MjA4MDIyMTQxNn0.7vMQ2tiK0hZEejHCV4HOcWGfgTQIa_gqxwSXO_2UgWk';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables');
@@ -10,15 +10,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
 }
 
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
-// Test connection
+// Test connection (silently)
 supabase.from('users').select('count').limit(1).then(({ error }) => {
   if (error) {
     console.error('Supabase connection error:', error);
   } else {
     console.log('✅ Supabase connected successfully');
   }
+}).catch((err) => {
+  console.error('Supabase connection error:', err);
 });
 
 // Courses

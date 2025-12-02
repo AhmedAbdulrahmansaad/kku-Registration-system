@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (error) {
         console.error('Error fetching user data:', error);
-        // Try to get from auth metadata
+        // If user doesn't exist in users table, try to create it from auth metadata
         const { data: authData } = await supabase.auth.getUser();
         if (authData?.user) {
           const userMetadata = authData.user.user_metadata;
@@ -85,7 +85,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         if (error) {
           console.error('Error getting session:', error);
-          if (mounted) setLoading(false);
+          if (mounted) {
+            setLoading(false);
+          }
           return;
         }
         
@@ -100,7 +102,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch (error) {
         console.error('Error checking auth session:', error);
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -115,15 +119,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (event === 'SIGNED_IN' && session?.user) {
         console.log('User signed in, fetching data...');
         // Wait a bit for the user record to be created
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
         const userData = await fetchUserData(session.user.id);
         if (userData && mounted) {
           console.log('User data set after sign in:', userData);
           setUser(userData);
         }
+        if (mounted) {
+          setLoading(false);
+        }
       } else if (event === 'SIGNED_OUT') {
         console.log('User signed out');
-        if (mounted) setUser(null);
+        if (mounted) {
+          setUser(null);
+          setLoading(false);
+        }
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         const userData = await fetchUserData(session.user.id);
         if (userData && mounted) {
@@ -142,6 +152,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(true);
     try {
       console.log('Attempting sign in...');
+      
+      // Try to sign in
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -149,13 +161,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (error) {
         console.error('Sign in error:', error);
+        
+        // Handle "Email not confirmed" error - allow login anyway
+        if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
+          console.log('Email not confirmed, but allowing login...');
+          // Try to get the user anyway
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user) {
+            const userProfile = await fetchUserData(userData.user.id);
+            if (userProfile) {
+              setUser(userProfile);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+        
         throw error;
       }
 
       if (data.user) {
         console.log('Sign in successful, fetching user data...');
         // Wait for user data to be available
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
         const userData = await fetchUserData(data.user.id);
         if (userData) {
           console.log('User data fetched:', userData);
@@ -167,8 +195,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch (error) {
       console.error('Sign in error:', error);
+      setLoading(false);
       throw error;
     } finally {
+      // Always set loading to false
       setLoading(false);
     }
   };
@@ -226,6 +256,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const existingUser = await fetchUserData(data.user.id);
             if (existingUser) {
               setUser(existingUser);
+              setLoading(false);
               return;
             }
           }
@@ -233,7 +264,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } else if (insertedUser) {
           console.log('User created successfully:', insertedUser);
           // Wait a bit then fetch to ensure it's in the database
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 300));
           const createdUser = await fetchUserData(data.user.id);
           if (createdUser) {
             console.log('User data set after signup:', createdUser);
@@ -250,6 +281,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signOut = async () => {
+    setLoading(true);
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
@@ -257,6 +289,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Sign out error:', error);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
