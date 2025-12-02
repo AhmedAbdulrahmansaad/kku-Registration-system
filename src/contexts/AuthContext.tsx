@@ -27,7 +27,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   // Fetch user data from users table
-  const fetchUserData = async (userId: string) => {
+  const fetchUserData = async (userId: string): Promise<User | null> => {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -37,6 +37,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (error) {
         console.error('Error fetching user data:', error);
+        // If user doesn't exist in users table, try to create it from auth metadata
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user) {
+          const userMetadata = authData.user.user_metadata;
+          const newUser = {
+            id: authData.user.id,
+            email: authData.user.email || '',
+            full_name: userMetadata?.full_name || authData.user.email?.split('@')[0] || 'User',
+            role: userMetadata?.role || 'student',
+            student_id: null,
+            major: null,
+            level: null,
+            created_at: new Date().toISOString(),
+          };
+          
+          const { data: insertedUser } = await supabase
+            .from('users')
+            .insert(newUser)
+            .select()
+            .single();
+          
+          return insertedUser;
+        }
         return null;
       }
       return data;
@@ -72,12 +95,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log('Auth state changed:', event, session?.user?.id);
       
       if (event === 'SIGNED_IN' && session?.user) {
+        // Wait a bit for the user record to be created
+        await new Promise(resolve => setTimeout(resolve, 500));
         const userData = await fetchUserData(session.user.id);
         if (userData) {
           setUser(userData);
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        const userData = await fetchUserData(session.user.id);
+        if (userData) {
+          setUser(userData);
+        }
       }
     });
 
@@ -100,6 +130,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (data.user) {
+        // Wait a bit for user data to be available
+        await new Promise(resolve => setTimeout(resolve, 500));
         const userData = await fetchUserData(data.user.id);
         if (userData) {
           setUser(userData);
@@ -137,8 +169,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (data.user) {
-        // Create user record in users table
-        const { error: insertError } = await supabase.from('users').insert({
+        // Create user record in users table immediately
+        const newUser = {
           id: data.user.id,
           email: email,
           full_name: userData.full_name || '',
@@ -147,11 +179,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           major: userData.major || null,
           level: userData.level || null,
           created_at: new Date().toISOString(),
-        });
+        };
+
+        const { error: insertError } = await supabase.from('users').insert(newUser);
 
         if (insertError) {
           console.error('Insert user error:', insertError);
-          // Don't throw - the user might be created by a trigger
+          // If user already exists, try to fetch it
+          if (insertError.code === '23505') {
+            const userData = await fetchUserData(data.user.id);
+            if (userData) {
+              setUser(userData);
+              return;
+            }
+          }
+        } else {
+          // User created successfully, fetch it
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const createdUser = await fetchUserData(data.user.id);
+          if (createdUser) {
+            setUser(createdUser);
+          }
         }
       }
     } catch (error) {

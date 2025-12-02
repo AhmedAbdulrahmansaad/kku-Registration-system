@@ -36,7 +36,6 @@ const SignupPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<SignupFormData>({
@@ -53,6 +52,7 @@ const SignupPage: React.FC = () => {
   // إذا كان المستخدم مسجل دخول، وجهه للوحة التحكم
   useEffect(() => {
     if (!authLoading && user) {
+      console.log('User logged in after signup, redirecting...', user.role);
       switch (user.role) {
         case 'student':
           navigate('/student/dashboard', { replace: true });
@@ -63,6 +63,8 @@ const SignupPage: React.FC = () => {
         case 'admin':
           navigate('/admin/dashboard', { replace: true });
           break;
+        default:
+          navigate('/student/dashboard', { replace: true });
       }
     }
   }, [user, authLoading, navigate]);
@@ -86,12 +88,12 @@ const SignupPage: React.FC = () => {
         level: data.role === 'student' ? Number(data.level) : undefined,
       });
 
-      console.log('Signup successful');
-      setSuccess(true);
+      console.log('Signup successful, user should be set now');
+      // التوجيه يتم تلقائياً من خلال useEffect عندما يتم تعيين user
     } catch (err: unknown) {
       console.error('Signup error:', err);
       if (err instanceof Error) {
-        if (err.message.includes('already registered')) {
+        if (err.message.includes('already registered') || err.message.includes('already exists')) {
           setError(language === 'ar' ? 'البريد الإلكتروني مسجل مسبقاً' : 'Email already registered');
         } else {
           setError(err.message || (language === 'ar' ? 'حدث خطأ أثناء إنشاء الحساب' : 'Error creating account'));
@@ -116,9 +118,10 @@ const SignupPage: React.FC = () => {
     );
   }
 
-  if (success) {
+  // If user is logged in, show redirecting message
+  if (user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -137,15 +140,10 @@ const SignupPage: React.FC = () => {
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             {language === 'ar' 
-              ? 'يرجى تأكيد بريدك الإلكتروني ثم تسجيل الدخول للوصول إلى النظام.' 
-              : 'Please verify your email and then login to access the system.'}
+              ? 'جاري توجيهك إلى لوحة التحكم...' 
+              : 'Redirecting you to dashboard...'}
           </p>
-          <Link 
-            to="/login" 
-            className="inline-block w-full bg-gradient-to-r from-primary-800 to-primary-700 text-white py-4 rounded-xl font-semibold hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg"
-          >
-            {t('auth.login')}
-          </Link>
+          <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-800 rounded-full animate-spin mx-auto" />
         </motion.div>
       </div>
     );
@@ -403,7 +401,7 @@ const SignupPage: React.FC = () => {
                     {t('auth.level')}
                   </label>
                   <select
-                    {...register('level', { required: selectedRole === 'student' ? t('errors.required') : false })}
+                    {...register('level', { required: selectedRole === 'student' ? t('errors.required') : false, valueAsNumber: true })}
                     className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((level) => (

@@ -73,8 +73,16 @@ const LandingPage: React.FC = () => {
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center overflow-hidden">
-        {/* Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900" />
+        {/* Background with University Image */}
+        <div className="absolute inset-0">
+          <div 
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{
+              backgroundImage: `url('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1920&q=80')`,
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900" />
+        </div>
         
         {/* Animated Shapes */}
         <div className="absolute inset-0 overflow-hidden">
@@ -197,7 +205,7 @@ const LandingPage: React.FC = () => {
                       <p className="font-semibold text-gray-900 dark:text-white">
                         {language === 'ar' ? 'تم التسجيل' : 'Registered'}
                       </p>
-                      <p className="text-xs text-gray-500">CS101</p>
+                      <p className="text-xs text-gray-500">MIS101</p>
                     </div>
                   </div>
                 </motion.div>
@@ -277,6 +285,75 @@ const LandingPage: React.FC = () => {
                 </p>
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* University Showcase Section */}
+      <section className="py-24 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div 
+            className="absolute inset-0 bg-cover bg-center opacity-10"
+            style={{
+              backgroundImage: `url('https://images.unsplash.com/photo-1562774053-701939374585?w=1920&q=80')`,
+            }}
+          />
+        </div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="relative"
+            >
+              <div className="rounded-3xl overflow-hidden shadow-2xl">
+                <img 
+                  src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80" 
+                  alt={language === 'ar' ? 'جامعة الملك خالد' : 'King Khalid University'}
+                  className="w-full h-[500px] object-cover"
+                />
+              </div>
+              <div className="absolute -bottom-6 -right-6 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-primary-800 to-primary-600 rounded-xl flex items-center justify-center">
+                    <GraduationCap className="w-9 h-9 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">KKU</p>
+                    <p className="text-sm text-gray-500">{language === 'ar' ? 'جامعة الملك خالد' : 'King Khalid University'}</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="space-y-6"
+            >
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
+                {language === 'ar' ? 'جامعة الملك خالد' : 'King Khalid University'}
+              </h2>
+              <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+                {language === 'ar' 
+                  ? 'جامعة الملك خالد هي إحدى الجامعات الحكومية في المملكة العربية السعودية، تأسست عام 1419 هـ. تقدم الجامعة برامج أكاديمية متميزة في مختلف التخصصات، وتلتزم بتقديم تعليم عالي الجودة يواكب متطلبات العصر.'
+                  : 'King Khalid University is one of the public universities in Saudi Arabia, established in 1998. The university offers distinguished academic programs in various disciplines and is committed to providing high-quality education that meets the requirements of the modern era.'}
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4 pt-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg">
+                  <p className="text-3xl font-bold text-primary-600 mb-1">50+</p>
+                  <p className="text-gray-600 dark:text-gray-400">{language === 'ar' ? 'كلية' : 'Colleges'}</p>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg">
+                  <p className="text-3xl font-bold text-primary-600 mb-1">100K+</p>
+                  <p className="text-gray-600 dark:text-gray-400">{language === 'ar' ? 'طالب' : 'Students'}</p>
+                </div>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
