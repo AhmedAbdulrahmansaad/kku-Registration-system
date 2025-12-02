@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   BookOpen, Search, Filter, ChevronDown, Clock,
-  CheckCircle, AlertCircle, Users, Calendar, Plus
+  CheckCircle, AlertCircle, Users, Calendar, Plus, RefreshCw
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,25 +20,37 @@ const CoursesPage: React.FC = () => {
   const [registering, setRegistering] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return;
+  const fetchData = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      console.log('Fetching courses and enrollments...');
+      const [coursesData, enrollmentsData] = await Promise.all([
+        getCourses(),
+        getEnrollments(user.id),
+      ]);
       
-      try {
-        const [coursesData, enrollmentsData] = await Promise.all([
-          getCourses(),
-          getEnrollments(user.id),
-        ]);
-        
-        setCourses(coursesData || []);
-        setEnrollments(enrollmentsData || []);
-      } catch (error) {
-        console.error('Error fetching courses:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+      console.log('Courses fetched:', coursesData?.length);
+      console.log('Enrollments fetched:', enrollmentsData?.length);
+      
+      setCourses(coursesData || []);
+      setEnrollments(enrollmentsData || []);
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      setMessage({
+        type: 'error',
+        text: language === 'ar' ? 'حدث خطأ أثناء جلب المقررات' : 'Error fetching courses'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
   }, [user]);
 
@@ -72,6 +84,7 @@ const CoursesPage: React.FC = () => {
               ? `المتطلبات السابقة غير مكتملة: ${missingPrereqs.join(', ')}`
               : `Missing prerequisites: ${missingPrereqs.join(', ')}`
           });
+          setRegistering(null);
           return;
         }
       }
@@ -126,7 +139,21 @@ const CoursesPage: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-800 rounded-full animate-spin" />
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-800 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="text-center py-12">
+        <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <p className="text-gray-500 dark:text-gray-400">
+          {language === 'ar' ? 'يجب تسجيل الدخول أولاً' : 'Please login first'}
+        </p>
       </div>
     );
   }
@@ -134,13 +161,22 @@ const CoursesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {t('nav.courses')}
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          {language === 'ar' ? 'اختر المقررات التي تريد تسجيلها' : 'Choose the courses you want to register'}
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {t('nav.courses')}
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400">
+            {language === 'ar' ? 'اختر المقررات التي تريد تسجيلها' : 'Choose the courses you want to register'}
+          </p>
+        </div>
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+        >
+          <RefreshCw className="w-5 h-5" />
+          {language === 'ar' ? 'تحديث' : 'Refresh'}
+        </button>
       </div>
 
       {/* Message */}
@@ -197,10 +233,31 @@ const CoursesPage: React.FC = () => {
       </div>
 
       {/* Courses List */}
-      {Object.keys(groupedCourses).length === 0 ? (
+      {courses.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
           <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">{t('common.noData')}</p>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">
+            {language === 'ar' ? 'لا توجد مقررات متاحة' : 'No courses available'}
+          </p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+            {language === 'ar' 
+              ? 'تأكد من أنك شغّلت ملف schema.sql في Supabase' 
+              : 'Make sure you ran schema.sql in Supabase'}
+          </p>
+          <button
+            onClick={fetchData}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-primary-800 text-white rounded-xl hover:bg-primary-700 transition-colors"
+          >
+            <RefreshCw className="w-5 h-5" />
+            {language === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+          </button>
+        </div>
+      ) : filteredCourses.length === 0 ? (
+        <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
+          <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400">
+            {language === 'ar' ? 'لا توجد نتائج للبحث' : 'No search results'}
+          </p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -217,6 +274,9 @@ const CoursesPage: React.FC = () => {
                     <span className="text-primary-600 dark:text-primary-400 font-bold">{level}</span>
                   </div>
                   {language === 'ar' ? `المستوى ${level}` : `Level ${level}`}
+                  <span className="text-sm text-gray-500 dark:text-gray-400 font-normal">
+                    ({levelCourses.length} {language === 'ar' ? 'مقرر' : 'courses'})
+                  </span>
                 </h2>
                 
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -255,12 +315,12 @@ const CoursesPage: React.FC = () => {
                           </div>
 
                           {/* Course Name */}
-                          <h3 className="font-bold text-gray-900 dark:text-white mb-2 line-clamp-2">
+                          <h3 className="font-bold text-gray-900 dark:text-white mb-2 line-clamp-2 min-h-[3rem]">
                             {language === 'ar' ? course.name_ar : course.name_en}
                           </h3>
 
                           {/* Course Details */}
-                          <div className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
+                          <div className="space-y-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
                             <div className="flex items-center gap-2">
                               <Clock className="w-4 h-4" />
                               <span>{course.credit_hours} {t('courses.creditHours')}</span>
@@ -268,13 +328,13 @@ const CoursesPage: React.FC = () => {
                             {course.instructor && (
                               <div className="flex items-center gap-2">
                                 <Users className="w-4 h-4" />
-                                <span>{course.instructor}</span>
+                                <span className="truncate">{course.instructor}</span>
                               </div>
                             )}
                             {course.prerequisites && course.prerequisites.length > 0 && (
                               <div className="flex items-start gap-2">
-                                <AlertCircle className="w-4 h-4 mt-0.5 text-orange-500" />
-                                <span className="text-orange-600 dark:text-orange-400">
+                                <AlertCircle className="w-4 h-4 mt-0.5 text-orange-500 flex-shrink-0" />
+                                <span className="text-orange-600 dark:text-orange-400 text-xs">
                                   {language === 'ar' ? 'متطلبات: ' : 'Prerequisites: '}
                                   {course.prerequisites.join(', ')}
                                 </span>
@@ -287,7 +347,7 @@ const CoursesPage: React.FC = () => {
                             <button
                               onClick={() => handleRegister(course)}
                               disabled={registering === course.id}
-                              className="w-full mt-4 bg-gradient-to-r from-primary-800 to-primary-700 text-white py-3 rounded-xl font-semibold hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg disabled:opacity-70 flex items-center justify-center gap-2"
+                              className="w-full bg-gradient-to-r from-primary-800 to-primary-700 text-white py-3 rounded-xl font-semibold hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg disabled:opacity-70 flex items-center justify-center gap-2"
                             >
                               {registering === course.id ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

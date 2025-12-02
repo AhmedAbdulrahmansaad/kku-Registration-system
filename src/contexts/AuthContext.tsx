@@ -29,6 +29,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Fetch user data from users table
   const fetchUserData = async (userId: string): Promise<User | null> => {
     try {
+      console.log('Fetching user data for:', userId);
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -37,7 +38,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (error) {
         console.error('Error fetching user data:', error);
-        // If user doesn't exist in users table, try to create it from auth metadata
+        // Try to get from auth metadata
         const { data: authData } = await supabase.auth.getUser();
         if (authData?.user) {
           const userMetadata = authData.user.user_metadata;
@@ -52,16 +53,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             created_at: new Date().toISOString(),
           };
           
-          const { data: insertedUser } = await supabase
+          const { data: insertedUser, error: insertError } = await supabase
             .from('users')
             .insert(newUser)
             .select()
             .single();
           
-          return insertedUser;
+          if (!insertError && insertedUser) {
+            return insertedUser;
+          }
         }
         return null;
       }
+      
+      console.log('User data fetched:', data);
       return data;
     } catch (error) {
       console.error('Error in fetchUserData:', error);
@@ -70,21 +75,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
+    let mounted = true;
+
     // Check active session
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Initializing auth...');
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (session?.user) {
+        if (error) {
+          console.error('Error getting session:', error);
+          if (mounted) setLoading(false);
+          return;
+        }
+        
+        if (session?.user && mounted) {
+          console.log('Session found, fetching user data...');
           const userData = await fetchUserData(session.user.id);
-          if (userData) {
+          if (userData && mounted) {
+            console.log('User set:', userData);
             setUser(userData);
           }
         }
       } catch (error) {
         console.error('Error checking auth session:', error);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
@@ -94,24 +110,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
       
+      if (!mounted) return;
+      
       if (event === 'SIGNED_IN' && session?.user) {
+        console.log('User signed in, fetching data...');
         // Wait a bit for the user record to be created
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const userData = await fetchUserData(session.user.id);
-        if (userData) {
+        if (userData && mounted) {
+          console.log('User data set after sign in:', userData);
           setUser(userData);
         }
       } else if (event === 'SIGNED_OUT') {
-        setUser(null);
+        console.log('User signed out');
+        if (mounted) setUser(null);
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         const userData = await fetchUserData(session.user.id);
-        if (userData) {
+        if (userData && mounted) {
           setUser(userData);
         }
       }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -119,6 +141,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     try {
+      console.log('Attempting sign in...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -130,12 +153,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (data.user) {
-        // Wait a bit for user data to be available
-        await new Promise(resolve => setTimeout(resolve, 500));
+        console.log('Sign in successful, fetching user data...');
+        // Wait for user data to be available
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const userData = await fetchUserData(data.user.id);
         if (userData) {
+          console.log('User data fetched:', userData);
           setUser(userData);
         } else {
+          console.error('User data not found after sign in');
           throw new Error('User data not found');
         }
       }
@@ -150,6 +176,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signUp = async (email: string, password: string, userData: Partial<User>) => {
     setLoading(true);
     try {
+      console.log('Attempting sign up...', { email, role: userData.role });
+      
       // Create auth user
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -169,6 +197,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (data.user) {
+        console.log('Auth user created, creating user record...');
+        
         // Create user record in users table immediately
         const newUser = {
           id: data.user.id,
@@ -181,23 +211,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           created_at: new Date().toISOString(),
         };
 
-        const { error: insertError } = await supabase.from('users').insert(newUser);
+        console.log('Inserting user:', newUser);
+        const { data: insertedUser, error: insertError } = await supabase
+          .from('users')
+          .insert(newUser)
+          .select()
+          .single();
 
         if (insertError) {
           console.error('Insert user error:', insertError);
           // If user already exists, try to fetch it
           if (insertError.code === '23505') {
-            const userData = await fetchUserData(data.user.id);
-            if (userData) {
-              setUser(userData);
+            console.log('User already exists, fetching...');
+            const existingUser = await fetchUserData(data.user.id);
+            if (existingUser) {
+              setUser(existingUser);
               return;
             }
           }
-        } else {
-          // User created successfully, fetch it
+          throw insertError;
+        } else if (insertedUser) {
+          console.log('User created successfully:', insertedUser);
+          // Wait a bit then fetch to ensure it's in the database
           await new Promise(resolve => setTimeout(resolve, 500));
           const createdUser = await fetchUserData(data.user.id);
           if (createdUser) {
+            console.log('User data set after signup:', createdUser);
             setUser(createdUser);
           }
         }

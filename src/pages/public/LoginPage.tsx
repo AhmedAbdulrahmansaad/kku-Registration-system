@@ -24,20 +24,14 @@ const LoginPage: React.FC = () => {
   // إذا كان المستخدم مسجل دخول، وجهه للوحة التحكم
   useEffect(() => {
     if (!authLoading && user) {
-      console.log('User logged in, redirecting...', user.role);
-      switch (user.role) {
-        case 'student':
-          navigate('/student/dashboard', { replace: true });
-          break;
-        case 'advisor':
-          navigate('/advisor/dashboard', { replace: true });
-          break;
-        case 'admin':
-          navigate('/admin/dashboard', { replace: true });
-          break;
-        default:
-          navigate('/student/dashboard', { replace: true });
-      }
+      console.log('User is logged in, redirecting...', user.role);
+      const redirectPath = 
+        user.role === 'student' ? '/student/dashboard' :
+        user.role === 'advisor' ? '/advisor/dashboard' :
+        user.role === 'admin' ? '/admin/dashboard' :
+        '/student/dashboard';
+      
+      navigate(redirectPath, { replace: true });
     }
   }, [user, authLoading, navigate]);
 
@@ -46,19 +40,19 @@ const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      console.log('Attempting login...');
+      console.log('Login attempt for:', data.email);
       await signIn(data.email, data.password);
-      console.log('Login successful');
+      console.log('Login successful, user should be set now');
       // التوجيه يتم تلقائياً من خلال useEffect
     } catch (err: unknown) {
       console.error('Login error:', err);
       if (err instanceof Error) {
-        if (err.message.includes('Invalid login')) {
+        if (err.message.includes('Invalid login') || err.message.includes('Invalid credentials')) {
           setError(language === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'Invalid email or password');
         } else if (err.message.includes('Email not confirmed')) {
           setError(language === 'ar' ? 'يرجى تأكيد بريدك الإلكتروني أولاً' : 'Please confirm your email first');
         } else {
-          setError(language === 'ar' ? 'حدث خطأ أثناء تسجيل الدخول' : 'Error during login');
+          setError(err.message || (language === 'ar' ? 'حدث خطأ أثناء تسجيل الدخول' : 'Error during login'));
         }
       } else {
         setError(language === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'Invalid email or password');
