@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Users, BookOpen, ClipboardCheck, Settings,
   TrendingUp, ChevronLeft, ChevronRight, Shield,
-  User, GraduationCap, BarChart3, RefreshCw, AlertCircle
+  User, GraduationCap, BarChart3, RefreshCw, AlertCircle, ChartPie
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, AreaChart, Area } from 'recharts';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -257,7 +257,7 @@ const AdminDashboard: React.FC = () => {
           className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
         >
           <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <PieChart className="w-5 h-5 text-purple-600" />
+            <ChartPie className="w-5 h-5 text-purple-600" />
             {language === 'ar' ? 'المستخدمين' : 'Users'}
           </h3>
           {userDistribution.some(u => u.value > 0) ? (
