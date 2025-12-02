@@ -31,7 +31,7 @@ const MAJORS = [
 
 const SignupPage: React.FC = () => {
   const { t, language } = useLanguage();
-  const { signUp, user } = useAuth();
+  const { signUp, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -43,6 +43,7 @@ const SignupPage: React.FC = () => {
     defaultValues: {
       role: 'student',
       major: 'نظم المعلومات الإدارية',
+      level: 1,
     }
   });
 
@@ -51,7 +52,7 @@ const SignupPage: React.FC = () => {
 
   // إذا كان المستخدم مسجل دخول، وجهه للوحة التحكم
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
       switch (user.role) {
         case 'student':
           navigate('/student/dashboard', { replace: true });
@@ -64,13 +65,19 @@ const SignupPage: React.FC = () => {
           break;
       }
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   const onSubmit = async (data: SignupFormData) => {
     setError('');
     setLoading(true);
 
     try {
+      console.log('Attempting signup with data:', {
+        email: data.email,
+        role: data.role,
+        full_name: data.full_name
+      });
+      
       await signUp(data.email, data.password, {
         full_name: data.full_name,
         role: data.role,
@@ -79,11 +86,16 @@ const SignupPage: React.FC = () => {
         level: data.role === 'student' ? Number(data.level) : undefined,
       });
 
+      console.log('Signup successful');
       setSuccess(true);
     } catch (err: unknown) {
       console.error('Signup error:', err);
       if (err instanceof Error) {
-        setError(err.message || (language === 'ar' ? 'حدث خطأ أثناء إنشاء الحساب' : 'Error creating account'));
+        if (err.message.includes('already registered')) {
+          setError(language === 'ar' ? 'البريد الإلكتروني مسجل مسبقاً' : 'Email already registered');
+        } else {
+          setError(err.message || (language === 'ar' ? 'حدث خطأ أثناء إنشاء الحساب' : 'Error creating account'));
+        }
       } else {
         setError(language === 'ar' ? 'حدث خطأ أثناء إنشاء الحساب' : 'Error creating account');
       }
@@ -91,6 +103,18 @@ const SignupPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-white/80">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (success) {
     return (
@@ -382,7 +406,6 @@ const SignupPage: React.FC = () => {
                     {...register('level', { required: selectedRole === 'student' ? t('errors.required') : false })}
                     className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none"
                   >
-                    <option value="">{t('auth.selectLevel')}</option>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((level) => (
                       <option key={level} value={level}>
                         {language === 'ar' ? `المستوى ${level}` : `Level ${level}`}

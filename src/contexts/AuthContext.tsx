@@ -26,6 +26,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch user data from users table
+  const fetchUserData = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching user data:', error);
+        return null;
+      }
+      return data;
+    } catch (error) {
+      console.error('Error in fetchUserData:', error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     // Check active session
     const initAuth = async () => {
@@ -33,13 +53,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (!error && userData) {
+          const userData = await fetchUserData(session.user.id);
+          if (userData) {
             setUser(userData);
           }
         }
@@ -54,14 +69,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.id);
+      
       if (event === 'SIGNED_IN' && session?.user) {
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (!error && userData) {
+        const userData = await fetchUserData(session.user.id);
+        if (userData) {
           setUser(userData);
         }
       } else if (event === 'SIGNED_OUT') {
@@ -82,17 +94,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Sign in error:', error);
+        throw error;
+      }
 
       if (data.user) {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-        
-        if (userError) throw userError;
-        setUser(userData);
+        const userData = await fetchUserData(data.user.id);
+        if (userData) {
+          setUser(userData);
+        } else {
+          throw new Error('User data not found');
+        }
       }
     } catch (error) {
       console.error('Sign in error:', error);
@@ -113,11 +126,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           data: {
             full_name: userData.full_name,
             role: userData.role,
-          }
+          },
+          emailRedirectTo: window.location.origin + '/login'
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Sign up auth error:', error);
+        throw error;
+      }
 
       if (data.user) {
         // Create user record in users table
@@ -126,14 +143,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           email: email,
           full_name: userData.full_name || '',
           role: userData.role || 'student',
-          student_id: userData.student_id,
-          major: userData.major,
-          level: userData.level,
+          student_id: userData.student_id || null,
+          major: userData.major || null,
+          level: userData.level || null,
+          created_at: new Date().toISOString(),
         });
 
         if (insertError) {
-          console.error('Insert error:', insertError);
-          // Don't throw, the trigger might have already created the user
+          console.error('Insert user error:', insertError);
+          // Don't throw - the user might be created by a trigger
         }
       }
     } catch (error) {

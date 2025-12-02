@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { Course, Enrollment, Request, Notification } from '../types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase environment variables');
+}
+
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 
 // Courses
 export const getCourses = async (): Promise<Course[]> => {
@@ -210,7 +214,7 @@ export const calculateGPA = async (userId: string): Promise<{ gpa: number; compl
   return {
     gpa,
     completedCredits: totalCredits,
-    totalCredits: 140, // Total required credits
+    totalCredits: 140,
   };
 };
 
@@ -227,28 +231,6 @@ const getGradePoints = (grade: string): number => {
     'F': 0,
   };
   return gradeMap[grade] || 0;
-};
-
-// Check prerequisites
-export const checkPrerequisites = async (userId: string, courseId: string): Promise<{ canRegister: boolean; missingPrereqs: string[] }> => {
-  const course = await getCourseById(courseId);
-  if (!course || !course.prerequisites || course.prerequisites.length === 0) {
-    return { canRegister: true, missingPrereqs: [] };
-  }
-
-  const { data: completedEnrollments } = await supabase
-    .from('enrollments')
-    .select('course:courses(course_code)')
-    .eq('user_id', userId)
-    .eq('status', 'completed');
-
-  const completedCourseCodes = completedEnrollments?.map((e: { course: { course_code: string } }) => e.course?.course_code) || [];
-  const missingPrereqs = course.prerequisites.filter(prereq => !completedCourseCodes.includes(prereq));
-
-  return {
-    canRegister: missingPrereqs.length === 0,
-    missingPrereqs,
-  };
 };
 
 export default supabase;

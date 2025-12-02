@@ -13,7 +13,7 @@ interface LoginFormData {
 
 const LoginPage: React.FC = () => {
   const { t, language } = useLanguage();
-  const { signIn, user } = useAuth();
+  const { signIn, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -23,7 +23,8 @@ const LoginPage: React.FC = () => {
 
   // إذا كان المستخدم مسجل دخول، وجهه للوحة التحكم
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
+      console.log('User logged in, redirecting...', user.role);
       switch (user.role) {
         case 'student':
           navigate('/student/dashboard', { replace: true });
@@ -34,24 +35,50 @@ const LoginPage: React.FC = () => {
         case 'admin':
           navigate('/admin/dashboard', { replace: true });
           break;
+        default:
+          navigate('/student/dashboard', { replace: true });
       }
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   const onSubmit = async (data: LoginFormData) => {
     setError('');
     setLoading(true);
 
     try {
+      console.log('Attempting login...');
       await signIn(data.email, data.password);
+      console.log('Login successful');
       // التوجيه يتم تلقائياً من خلال useEffect
     } catch (err: unknown) {
       console.error('Login error:', err);
-      setError(language === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'Invalid email or password');
+      if (err instanceof Error) {
+        if (err.message.includes('Invalid login')) {
+          setError(language === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'Invalid email or password');
+        } else if (err.message.includes('Email not confirmed')) {
+          setError(language === 'ar' ? 'يرجى تأكيد بريدك الإلكتروني أولاً' : 'Please confirm your email first');
+        } else {
+          setError(language === 'ar' ? 'حدث خطأ أثناء تسجيل الدخول' : 'Error during login');
+        }
+      } else {
+        setError(language === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'Invalid email or password');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-white/80">{language === 'ar' ? 'جاري التحميل...' : 'Loading...'}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
