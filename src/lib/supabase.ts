@@ -1,339 +1,254 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
+import { Course, Enrollment, Request, Notification } from '../types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Auth helpers
-export const signUp = async (email: string, password: string, userData: {
-  full_name: string;
-  role: 'student' | 'advisor' | 'admin';
-  student_id?: string;
-  major?: string;
-  level?: number;
-}) => {
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-  })
-
-  if (authError) throw authError
-
-  if (authData.user) {
-    const { error: profileError } = await supabase
-      .from('users')
-      .insert({
-        id: authData.user.id,
-        email,
-        full_name: userData.full_name,
-        role: userData.role,
-        student_id: userData.student_id || null,
-        major: userData.major || null,
-        level: userData.level || null,
-      })
-
-    if (profileError) throw profileError
-  }
-
-  return authData
-}
-
-export const signIn = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (error) throw error
-  return data
-}
-
-export const signOut = async () => {
-  const { error } = await supabase.auth.signOut()
-  if (error) throw error
-}
-
-export const resetPassword = async (email: string) => {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
-  })
-  if (error) throw error
-}
-
-export const getCurrentUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return null
-
-  const { data: profile, error } = await supabase
-    .from('users')
+// Courses
+export const getCourses = async (): Promise<Course[]> => {
+  const { data, error } = await supabase
+    .from('courses')
     .select('*')
-    .eq('id', user.id)
-    .single()
-
-  if (error) throw error
-  return profile
-}
-
-// Course helpers
-export const getCourses = async (level?: number) => {
-  let query = supabase.from('courses').select('*')
+    .order('level', { ascending: true })
+    .order('course_code', { ascending: true });
   
-  if (level) {
-    query = query.lte('level', level)
+  if (error) {
+    console.error('Error fetching courses:', error);
+    return [];
   }
-  
-  const { data, error } = await query.order('level').order('course_code')
-  if (error) throw error
-  return data
-}
+  return data || [];
+};
 
-export const getCourseById = async (id: string) => {
+export const getCourseById = async (id: string): Promise<Course | null> => {
   const { data, error } = await supabase
     .from('courses')
     .select('*')
     .eq('id', id)
-    .single()
+    .single();
   
-  if (error) throw error
-  return data
-}
-
-// Enrollment helpers
-export const getEnrollments = async (studentId: string, status?: string) => {
-  let query = supabase
-    .from('enrollments')
-    .select(`
-      *,
-      course:courses(*)
-    `)
-    .eq('student_id', studentId)
-  
-  if (status) {
-    query = query.eq('status', status)
+  if (error) {
+    console.error('Error fetching course:', error);
+    return null;
   }
-  
-  const { data, error } = await query.order('created_at', { ascending: false })
-  if (error) throw error
-  return data
-}
+  return data;
+};
 
-export const createEnrollment = async (enrollment: {
-  student_id: string;
-  course_id: string;
-  semester: string;
-  year: number;
-}) => {
+export const createCourse = async (course: Partial<Course>): Promise<Course | null> => {
+  const { data, error } = await supabase
+    .from('courses')
+    .insert(course)
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('Error creating course:', error);
+    throw error;
+  }
+  return data;
+};
+
+export const updateCourse = async (id: string, course: Partial<Course>): Promise<Course | null> => {
+  const { data, error } = await supabase
+    .from('courses')
+    .update(course)
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('Error updating course:', error);
+    throw error;
+  }
+  return data;
+};
+
+export const deleteCourse = async (id: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('courses')
+    .delete()
+    .eq('id', id);
+  
+  if (error) {
+    console.error('Error deleting course:', error);
+    throw error;
+  }
+  return true;
+};
+
+// Enrollments
+export const getEnrollments = async (userId: string): Promise<Enrollment[]> => {
   const { data, error } = await supabase
     .from('enrollments')
-    .insert({
-      ...enrollment,
-      status: 'pending',
-    })
-    .select()
-    .single()
+    .select('*, course:courses(*)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
   
-  if (error) throw error
-  return data
-}
+  if (error) {
+    console.error('Error fetching enrollments:', error);
+    return [];
+  }
+  return data || [];
+};
 
-// Request helpers
-export const getRequests = async (advisorId?: string, studentId?: string) => {
+export const createEnrollment = async (enrollment: Partial<Enrollment>): Promise<Enrollment | null> => {
+  const { data, error } = await supabase
+    .from('enrollments')
+    .insert(enrollment)
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('Error creating enrollment:', error);
+    throw error;
+  }
+  return data;
+};
+
+// Requests
+export const getRequests = async (userId?: string): Promise<Request[]> => {
   let query = supabase
     .from('requests')
-    .select(`
-      *,
-      course:courses(*),
-      student:users!requests_student_id_fkey(*)
-    `)
+    .select('*, course:courses(*), student:users!requests_student_id_fkey(*)')
+    .order('created_at', { ascending: false });
   
-  if (advisorId) {
-    query = query.eq('advisor_id', advisorId)
+  if (userId) {
+    query = query.eq('student_id', userId);
   }
   
-  if (studentId) {
-    query = query.eq('student_id', studentId)
+  const { data, error } = await query;
+  
+  if (error) {
+    console.error('Error fetching requests:', error);
+    return [];
   }
-  
-  const { data, error } = await query.order('created_at', { ascending: false })
-  if (error) throw error
-  return data
-}
+  return data || [];
+};
 
-export const createRequest = async (request: {
-  student_id: string;
-  course_id: string;
-  advisor_id: string;
-  request_type: 'enroll' | 'drop' | 'withdraw';
-  notes?: string;
-}) => {
+export const createRequest = async (request: Partial<Request>): Promise<Request | null> => {
   const { data, error } = await supabase
     .from('requests')
-    .insert({
-      ...request,
-      status: 'pending',
-    })
+    .insert(request)
     .select()
-    .single()
+    .single();
   
-  if (error) throw error
-  return data
-}
+  if (error) {
+    console.error('Error creating request:', error);
+    throw error;
+  }
+  return data;
+};
 
-export const updateRequestStatus = async (
-  requestId: string,
-  status: 'approved' | 'rejected',
-  advisorNotes?: string
-) => {
+export const updateRequest = async (id: string, request: Partial<Request>): Promise<Request | null> => {
   const { data, error } = await supabase
     .from('requests')
-    .update({
-      status,
-      advisor_notes: advisorNotes,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', requestId)
+    .update(request)
+    .eq('id', id)
     .select()
-    .single()
+    .single();
   
-  if (error) throw error
-  return data
-}
+  if (error) {
+    console.error('Error updating request:', error);
+    throw error;
+  }
+  return data;
+};
 
-// Notification helpers
-export const getNotifications = async (userId: string) => {
+// Notifications
+export const getNotifications = async (userId: string): Promise<Notification[]> => {
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false });
   
-  if (error) throw error
-  return data
-}
+  if (error) {
+    console.error('Error fetching notifications:', error);
+    return [];
+  }
+  return data || [];
+};
 
-export const markNotificationAsRead = async (notificationId: string) => {
+export const markNotificationAsRead = async (id: string): Promise<void> => {
   const { error } = await supabase
     .from('notifications')
     .update({ is_read: true })
-    .eq('id', notificationId)
+    .eq('id', id);
   
-  if (error) throw error
-}
-
-export const createNotification = async (notification: {
-  user_id: string;
-  title_ar: string;
-  title_en: string;
-  message_ar: string;
-  message_en: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-}) => {
-  const { data, error } = await supabase
-    .from('notifications')
-    .insert({
-      ...notification,
-      is_read: false,
-    })
-    .select()
-    .single()
-  
-  if (error) throw error
-  return data
-}
-
-// Student helpers for advisors
-export const getStudentsByAdvisor = async (advisorId: string) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('advisor_id', advisorId)
-    .eq('role', 'student')
-    .order('full_name')
-  
-  if (error) throw error
-  return data
-}
-
-// Admin helpers
-export const getAllUsers = async () => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .order('created_at', { ascending: false })
-  
-  if (error) throw error
-  return data
-}
-
-export const updateCourse = async (courseId: string, updates: Partial<{
-  name_ar: string;
-  name_en: string;
-  description_ar: string;
-  description_en: string;
-  credit_hours: number;
-  instructor_name: string;
-  room_number: string;
-  max_students: number;
-  schedule: object;
-}>) => {
-  const { data, error } = await supabase
-    .from('courses')
-    .update(updates)
-    .eq('id', courseId)
-    .select()
-    .single()
-  
-  if (error) throw error
-  return data
-}
-
-export const deleteCourse = async (courseId: string) => {
-  const { error } = await supabase
-    .from('courses')
-    .delete()
-    .eq('id', courseId)
-  
-  if (error) throw error
-}
+  if (error) {
+    console.error('Error marking notification as read:', error);
+  }
+};
 
 // GPA Calculation
-export const calculateGPA = async (studentId: string) => {
+export const calculateGPA = async (userId: string): Promise<{ gpa: number; completedCredits: number; totalCredits: number }> => {
   const { data: enrollments, error } = await supabase
     .from('enrollments')
-    .select(`
-      grade,
-      gpa_points,
-      course:courses(credit_hours)
-    `)
-    .eq('student_id', studentId)
-    .eq('status', 'completed')
-    .not('grade', 'is', null)
-
-  if (error) throw error
-
-  if (!enrollments || enrollments.length === 0) {
-    return { gpa: 0, totalCredits: 0, completedCredits: 0 }
+    .select('*, course:courses(*)')
+    .eq('user_id', userId)
+    .eq('status', 'completed');
+  
+  if (error || !enrollments) {
+    return { gpa: 0, completedCredits: 0, totalCredits: 140 };
   }
 
-  let totalPoints = 0
-  let totalCredits = 0
+  let totalPoints = 0;
+  let totalCredits = 0;
 
-  enrollments.forEach((enrollment: { gpa_points: number | null; course: { credit_hours: number } | null }) => {
-    if (enrollment.gpa_points !== null && enrollment.course) {
-      const credits = enrollment.course.credit_hours
-      totalPoints += enrollment.gpa_points * credits
-      totalCredits += credits
+  enrollments.forEach((enrollment: Enrollment) => {
+    if (enrollment.grade && enrollment.course) {
+      const gradePoints = getGradePoints(enrollment.grade);
+      const credits = enrollment.course.credit_hours;
+      totalPoints += gradePoints * credits;
+      totalCredits += credits;
     }
-  })
+  });
 
-  const gpa = totalCredits > 0 ? totalPoints / totalCredits : 0
+  const gpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
+  
+  return {
+    gpa,
+    completedCredits: totalCredits,
+    totalCredits: 140, // Total required credits
+  };
+};
+
+const getGradePoints = (grade: string): number => {
+  const gradeMap: { [key: string]: number } = {
+    'A+': 5.0,
+    'A': 4.75,
+    'B+': 4.5,
+    'B': 4.0,
+    'C+': 3.5,
+    'C': 3.0,
+    'D+': 2.5,
+    'D': 2.0,
+    'F': 0,
+  };
+  return gradeMap[grade] || 0;
+};
+
+// Check prerequisites
+export const checkPrerequisites = async (userId: string, courseId: string): Promise<{ canRegister: boolean; missingPrereqs: string[] }> => {
+  const course = await getCourseById(courseId);
+  if (!course || !course.prerequisites || course.prerequisites.length === 0) {
+    return { canRegister: true, missingPrereqs: [] };
+  }
+
+  const { data: completedEnrollments } = await supabase
+    .from('enrollments')
+    .select('course:courses(course_code)')
+    .eq('user_id', userId)
+    .eq('status', 'completed');
+
+  const completedCourseCodes = completedEnrollments?.map((e: { course: { course_code: string } }) => e.course?.course_code) || [];
+  const missingPrereqs = course.prerequisites.filter(prereq => !completedCourseCodes.includes(prereq));
 
   return {
-    gpa: Math.round(gpa * 100) / 100,
-    totalCredits,
-    completedCredits: totalCredits,
-  }
-}
+    canRegister: missingPrereqs.length === 0,
+    missingPrereqs,
+  };
+};
 
+export default supabase;

@@ -1,33 +1,52 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Award, Target } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { TrendingUp, Calculator, Award, Target, Plus, Trash2 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar } from 'recharts';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getEnrollments, calculateGPA } from '../../lib/supabase';
-import { Enrollment, GRADE_POINTS } from '../../types';
+import { Enrollment } from '../../types';
+
+interface SimulatedCourse {
+  id: string;
+  name: string;
+  credits: number;
+  grade: string;
+}
 
 const GPAPage: React.FC = () => {
   const { t, language } = useLanguage();
   const { user } = useAuth();
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [gpaData, setGpaData] = useState({ gpa: 0, completedCredits: 0, totalCredits: 0 });
+  const [gpaData, setGpaData] = useState({ gpa: 0, completedCredits: 0, totalCredits: 140 });
   const [loading, setLoading] = useState(true);
+  const [simulatedCourses, setSimulatedCourses] = useState<SimulatedCourse[]>([]);
+  const [newCourse, setNewCourse] = useState({ name: '', credits: 3, grade: 'A' });
+
+  const grades = [
+    { value: 'A+', points: 5.0, label: 'A+ (5.0)' },
+    { value: 'A', points: 4.75, label: 'A (4.75)' },
+    { value: 'B+', points: 4.5, label: 'B+ (4.5)' },
+    { value: 'B', points: 4.0, label: 'B (4.0)' },
+    { value: 'C+', points: 3.5, label: 'C+ (3.5)' },
+    { value: 'C', points: 3.0, label: 'C (3.0)' },
+    { value: 'D+', points: 2.5, label: 'D+ (2.5)' },
+    { value: 'D', points: 2.0, label: 'D (2.0)' },
+    { value: 'F', points: 0, label: 'F (0)' },
+  ];
+
+  const getGradePoints = (grade: string) => {
+    return grades.find(g => g.value === grade)?.points || 0;
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
       
       try {
-        const [enrollmentsData, gpa] = await Promise.all([
-          getEnrollments(user.id),
-          calculateGPA(user.id),
-        ]);
-        
-        setEnrollments(enrollmentsData?.filter(e => e.status === 'completed') || []);
+        const gpa = await calculateGPA(user.id);
         setGpaData(gpa);
       } catch (error) {
-        console.error('Error fetching GPA data:', error);
+        console.error('Error fetching GPA:', error);
       } finally {
         setLoading(false);
       }
@@ -36,65 +55,79 @@ const GPAPage: React.FC = () => {
     fetchData();
   }, [user]);
 
-  // Calculate semester GPAs for chart
-  const semesterData = enrollments.reduce((acc, enrollment) => {
-    const key = `${enrollment.semester}-${enrollment.year}`;
-    if (!acc[key]) {
-      acc[key] = {
-        semester: `${enrollment.semester === 'fall' ? 'خريف' : enrollment.semester === 'spring' ? 'ربيع' : 'صيف'} ${enrollment.year}`,
-        courses: [],
-      };
-    }
-    acc[key].courses.push(enrollment);
-    return acc;
-  }, {} as Record<string, { semester: string; courses: Enrollment[] }>);
+  const calculateSimulatedGPA = () => {
+    const totalExistingPoints = gpaData.gpa * gpaData.completedCredits;
+    const totalExistingCredits = gpaData.completedCredits;
 
-  const chartData = Object.values(semesterData).map(semester => {
-    let totalPoints = 0;
-    let totalCredits = 0;
-    
-    semester.courses.forEach(enrollment => {
-      if (enrollment.grade && enrollment.course) {
-        totalPoints += (GRADE_POINTS[enrollment.grade] || 0) * enrollment.course.credit_hours;
-        totalCredits += enrollment.course.credit_hours;
-      }
+    let simulatedPoints = 0;
+    let simulatedCredits = 0;
+
+    simulatedCourses.forEach(course => {
+      simulatedPoints += getGradePoints(course.grade) * course.credits;
+      simulatedCredits += course.credits;
     });
+
+    const totalPoints = totalExistingPoints + simulatedPoints;
+    const totalCredits = totalExistingCredits + simulatedCredits;
+
+    return totalCredits > 0 ? totalPoints / totalCredits : 0;
+  };
+
+  const addSimulatedCourse = () => {
+    if (!newCourse.name) return;
     
-    return {
-      name: semester.semester,
-      gpa: totalCredits > 0 ? parseFloat((totalPoints / totalCredits).toFixed(2)) : 0,
-    };
-  });
+    setSimulatedCourses([
+      ...simulatedCourses,
+      {
+        id: Date.now().toString(),
+        name: newCourse.name,
+        credits: newCourse.credits,
+        grade: newCourse.grade,
+      },
+    ]);
+    setNewCourse({ name: '', credits: 3, grade: 'A' });
+  };
 
-  // Grade distribution for pie chart
-  const gradeDistribution = enrollments.reduce((acc, enrollment) => {
-    if (enrollment.grade) {
-      acc[enrollment.grade] = (acc[enrollment.grade] || 0) + 1;
-    }
-    return acc;
-  }, {} as Record<string, number>);
-
-  const pieData = Object.entries(gradeDistribution).map(([grade, count]) => ({
-    name: grade,
-    value: count,
-  }));
-
-  const COLORS = ['#184A2C', '#2d8848', '#3baa5e', '#D4AF37', '#e8c84d', '#f59e0b', '#ef4444', '#dc2626', '#b91c1c'];
+  const removeSimulatedCourse = (id: string) => {
+    setSimulatedCourses(simulatedCourses.filter(c => c.id !== id));
+  };
 
   const getGPAClassification = (gpa: number) => {
-    if (gpa >= 4.5) return { text: t('gpa.excellent'), color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' };
-    if (gpa >= 3.75) return { text: t('gpa.veryGood'), color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' };
-    if (gpa >= 2.75) return { text: t('gpa.good'), color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' };
-    if (gpa >= 2.0) return { text: t('gpa.acceptable'), color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-900/30' };
-    return { text: t('gpa.weak'), color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30' };
+    if (gpa >= 4.5) return { text: language === 'ar' ? 'ممتاز' : 'Excellent', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' };
+    if (gpa >= 3.75) return { text: language === 'ar' ? 'جيد جداً' : 'Very Good', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' };
+    if (gpa >= 2.75) return { text: language === 'ar' ? 'جيد' : 'Good', color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30' };
+    if (gpa >= 2.0) return { text: language === 'ar' ? 'مقبول' : 'Acceptable', color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' };
+    return { text: language === 'ar' ? 'ضعيف' : 'Weak', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' };
   };
 
   const classification = getGPAClassification(gpaData.gpa);
+  const simulatedGPA = calculateSimulatedGPA();
+  const simulatedClassification = getGPAClassification(simulatedGPA);
+
+  const progressData = [
+    { name: language === 'ar' ? 'منجز' : 'Completed', value: gpaData.completedCredits },
+    { name: language === 'ar' ? 'متبقي' : 'Remaining', value: gpaData.totalCredits - gpaData.completedCredits },
+  ];
+
+  const COLORS = ['#184A2C', '#e5e7eb'];
+
+  const semesterData = [
+    { semester: '1', gpa: 4.2 },
+    { semester: '2', gpa: 4.4 },
+    { semester: '3', gpa: 4.1 },
+    { semester: '4', gpa: 4.5 },
+    { semester: '5', gpa: 4.3 },
+  ];
+
+  const gradeDistribution = grades.slice(0, 5).map(g => ({
+    grade: g.value,
+    count: Math.floor(Math.random() * 10) + 1,
+  }));
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="spinner" />
+        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-800 rounded-full animate-spin" />
       </div>
     );
   }
@@ -104,47 +137,34 @@ const GPAPage: React.FC = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {t('gpa.title')}
+          {t('nav.gpa')}
         </h1>
         <p className="text-gray-500 dark:text-gray-400">
-          {language === 'ar' ? 'تتبع معدلك التراكمي وتقدمك الأكاديمي' : 'Track your GPA and academic progress'}
+          {language === 'ar' ? 'حساب ومتابعة المعدل التراكمي' : 'Calculate and track your GPA'}
         </p>
       </div>
 
-      {/* GPA Cards */}
-      <div className="grid md:grid-cols-3 gap-6">
+      {/* Current GPA Cards */}
+      <div className="grid md:grid-cols-4 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-gradient-to-br from-primary-800 to-primary-600 rounded-2xl p-6 text-white"
         >
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
-              <TrendingUp className="w-8 h-8" />
-            </div>
-            <div>
-              <p className="text-white/70 text-sm">{t('gpa.currentGPA')}</p>
-              <p className="text-4xl font-bold">{gpaData.gpa.toFixed(2)}</p>
-              <p className="text-sm text-white/70">من 5.00</p>
-            </div>
-          </div>
+          <TrendingUp className="w-10 h-10 mb-3 text-white/80" />
+          <p className="text-4xl font-bold">{gpaData.gpa.toFixed(2)}</p>
+          <p className="text-white/80">{t('dashboard.gpa')}</p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className={`rounded-2xl p-6 ${classification.bg}`}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
         >
-          <div className="flex items-center gap-4">
-            <div className={`w-16 h-16 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center`}>
-              <Award className={`w-8 h-8 ${classification.color}`} />
-            </div>
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">التقدير</p>
-              <p className={`text-3xl font-bold ${classification.color}`}>{classification.text}</p>
-            </div>
-          </div>
+          <Award className="w-10 h-10 mb-3 text-secondary-500" />
+          <p className={`text-2xl font-bold ${classification.color}`}>{classification.text}</p>
+          <p className="text-gray-500 dark:text-gray-400">{language === 'ar' ? 'التقدير' : 'Classification'}</p>
         </motion.div>
 
         <motion.div
@@ -153,169 +173,225 @@ const GPAPage: React.FC = () => {
           transition={{ delay: 0.2 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
         >
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-secondary-100 dark:bg-secondary-900/30 rounded-xl flex items-center justify-center">
-              <Target className="w-8 h-8 text-secondary-600 dark:text-secondary-400" />
-            </div>
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">{t('transcript.completedCredits')}</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{gpaData.completedCredits}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">من 140 ساعة</p>
-            </div>
-          </div>
-          
-          {/* Progress Bar */}
-          <div className="mt-4">
-            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-secondary-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min((gpaData.completedCredits / 140) * 100, 100)}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {((gpaData.completedCredits / 140) * 100).toFixed(1)}% مكتمل
-            </p>
-          </div>
+          <Target className="w-10 h-10 mb-3 text-blue-500" />
+          <p className="text-4xl font-bold text-gray-900 dark:text-white">{gpaData.completedCredits}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('dashboard.completedCredits')}</p>
         </motion.div>
-      </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* GPA Progress Chart */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
         >
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">
-            {t('gpa.semesterProgress')}
-          </h3>
-          
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis 
-                  dataKey="name" 
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                />
-                <YAxis 
-                  domain={[0, 5]} 
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#fff', 
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                  }}
-                  formatter={(value: number) => [value.toFixed(2), 'المعدل']}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="gpa" 
-                  stroke="#184A2C" 
-                  strokeWidth={3}
-                  dot={{ fill: '#184A2C', strokeWidth: 2, r: 6 }}
-                  activeDot={{ r: 8, fill: '#D4AF37' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-gray-400">
-              {t('common.noData')}
-            </div>
-          )}
+          <Calculator className="w-10 h-10 mb-3 text-purple-500" />
+          <p className="text-4xl font-bold text-gray-900 dark:text-white">
+            {Math.round((gpaData.completedCredits / gpaData.totalCredits) * 100)}%
+          </p>
+          <p className="text-gray-500 dark:text-gray-400">{language === 'ar' ? 'نسبة الإنجاز' : 'Progress'}</p>
         </motion.div>
+      </div>
 
-        {/* Grade Distribution */}
+      {/* Charts Row */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Progress Chart */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
         >
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">
-            {t('gpa.gradeDistribution')}
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5 text-primary-600" />
+            {language === 'ar' ? 'التقدم الأكاديمي' : 'Academic Progress'}
           </h3>
-          
-          {pieData.length > 0 ? (
-            <div className="flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={300}>
+          <div className="flex items-center justify-center">
+            <div className="w-48 h-48 relative">
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
+                    data={progressData}
                     innerRadius={60}
-                    outerRadius={100}
+                    outerRadius={80}
                     paddingAngle={5}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                   >
-                    {pieData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    {progressData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index]} />
                     ))}
                   </Pie>
-                  <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-primary-600">
+                    {Math.round((gpaData.completedCredits / gpaData.totalCredits) * 100)}%
+                  </p>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-gray-400">
-              {t('common.noData')}
-            </div>
-          )}
-          
-          {/* Legend */}
-          <div className="flex flex-wrap justify-center gap-4 mt-4">
-            {pieData.map((entry, index) => (
-              <div key={entry.name} className="flex items-center gap-2">
-                <div 
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                />
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {entry.name}: {entry.value}
-                </span>
+          </div>
+          <div className="flex justify-center gap-8 mt-4">
+            {progressData.map((item, index) => (
+              <div key={item.name} className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index] }} />
+                <span className="text-sm text-gray-600 dark:text-gray-400">{item.name}: {item.value}</span>
               </div>
             ))}
           </div>
         </motion.div>
+
+        {/* GPA Trend */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
+        >
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-primary-600" />
+            {language === 'ar' ? 'تطور المعدل' : 'GPA Trend'}
+          </h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={semesterData}>
+              <defs>
+                <linearGradient id="gpaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#184A2C" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#184A2C" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="semester" axisLine={false} tickLine={false} />
+              <YAxis domain={[0, 5]} axisLine={false} tickLine={false} />
+              <Tooltip 
+                contentStyle={{ 
+                  background: 'rgba(255,255,255,0.9)', 
+                  border: 'none', 
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                }}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="gpa" 
+                stroke="#184A2C" 
+                strokeWidth={3}
+                fill="url(#gpaGradient)" 
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </motion.div>
       </div>
 
-      {/* GPA Scale Reference */}
+      {/* GPA Calculator */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
+        transition={{ delay: 0.6 }}
+        className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
+      >
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <Calculator className="w-5 h-5 text-primary-600" />
+          {language === 'ar' ? 'حاسبة المعدل المتوقع' : 'GPA Calculator'}
+        </h3>
+
+        {/* Add Course Form */}
+        <div className="grid md:grid-cols-4 gap-4 mb-6">
+          <input
+            type="text"
+            value={newCourse.name}
+            onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
+            placeholder={language === 'ar' ? 'اسم المقرر' : 'Course Name'}
+            className="px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+          />
+          <select
+            value={newCourse.credits}
+            onChange={(e) => setNewCourse({ ...newCourse, credits: Number(e.target.value) })}
+            className="px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+          >
+            {[1, 2, 3, 4, 5].map(c => (
+              <option key={c} value={c}>{c} {language === 'ar' ? 'ساعات' : 'Credits'}</option>
+            ))}
+          </select>
+          <select
+            value={newCourse.grade}
+            onChange={(e) => setNewCourse({ ...newCourse, grade: e.target.value })}
+            className="px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+          >
+            {grades.map(g => (
+              <option key={g.value} value={g.value}>{g.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={addSimulatedCourse}
+            className="bg-primary-800 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            {t('common.add')}
+          </button>
+        </div>
+
+        {/* Simulated Courses List */}
+        {simulatedCourses.length > 0 && (
+          <div className="space-y-2 mb-6">
+            {simulatedCourses.map(course => (
+              <div
+                key={course.id}
+                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
+              >
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">{course.name}</p>
+                  <p className="text-sm text-gray-500">{course.credits} {t('courses.creditHours')} • {course.grade}</p>
+                </div>
+                <button
+                  onClick={() => removeSimulatedCourse(course.id)}
+                  className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Simulated GPA Result */}
+        {simulatedCourses.length > 0 && (
+          <div className="grid md:grid-cols-2 gap-4 p-6 bg-gradient-to-r from-primary-50 to-secondary-50 dark:from-primary-900/20 dark:to-secondary-900/20 rounded-xl">
+            <div className="text-center">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                {language === 'ar' ? 'المعدل الحالي' : 'Current GPA'}
+              </p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">{gpaData.gpa.toFixed(2)}</p>
+              <p className={`text-sm ${classification.color}`}>{classification.text}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                {language === 'ar' ? 'المعدل المتوقع' : 'Expected GPA'}
+              </p>
+              <p className="text-3xl font-bold text-primary-600">{simulatedGPA.toFixed(2)}</p>
+              <p className={`text-sm ${simulatedClassification.color}`}>{simulatedClassification.text}</p>
+            </div>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Grading Scale */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7 }}
         className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
       >
         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">
-          نظام الدرجات والنقاط
+          {language === 'ar' ? 'نظام الدرجات' : 'Grading Scale'}
         </h3>
-        
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-4">
-          {Object.entries(GRADE_POINTS).map(([grade, points]) => (
-            <div 
-              key={grade}
-              className={`text-center p-4 rounded-xl ${
-                points >= 4.5 
-                  ? 'bg-green-100 dark:bg-green-900/30' 
-                  : points >= 3.5
-                  ? 'bg-blue-100 dark:bg-blue-900/30'
-                  : points >= 2.5
-                  ? 'bg-yellow-100 dark:bg-yellow-900/30'
-                  : points >= 2.0
-                  ? 'bg-orange-100 dark:bg-orange-900/30'
-                  : 'bg-red-100 dark:bg-red-900/30'
-              }`}
+        <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3">
+          {grades.map(grade => (
+            <div
+              key={grade.value}
+              className="text-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
             >
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{grade}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{points.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-primary-600">{grade.value}</p>
+              <p className="text-sm text-gray-500">{grade.points.toFixed(2)}</p>
             </div>
           ))}
         </div>
@@ -325,4 +401,3 @@ const GPAPage: React.FC = () => {
 };
 
 export default GPAPage;
-

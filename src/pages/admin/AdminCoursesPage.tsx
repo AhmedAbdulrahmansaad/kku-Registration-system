@@ -1,41 +1,35 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  BookOpen, Search, Plus, Edit, Trash2, X, 
-  AlertCircle, CheckCircle, Filter, ChevronDown
+  BookOpen, Search, Plus, Edit, Trash2, 
+  X, Save, ChevronDown, Filter, AlertCircle
 } from 'lucide-react';
-import { useForm } from 'react-hook-form';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { getCourses, updateCourse, deleteCourse, supabase } from '../../lib/supabase';
+import { getCourses, createCourse, updateCourse, deleteCourse } from '../../lib/supabase';
 import { Course } from '../../types';
-
-interface CourseFormData {
-  course_code: string;
-  name_ar: string;
-  name_en: string;
-  description_ar: string;
-  description_en: string;
-  credit_hours: number;
-  level: number;
-  semester: 'fall' | 'spring' | 'summer';
-  instructor_name: string;
-  room_number: string;
-  max_students: number;
-}
 
 const AdminCoursesPage: React.FC = () => {
   const { t, language } = useLanguage();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState<number | 'all'>('all');
+  const [levelFilter, setLevelFilter] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [processing, setProcessing] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CourseFormData>();
+  const [formData, setFormData] = useState({
+    course_code: '',
+    name_ar: '',
+    name_en: '',
+    credit_hours: 3,
+    level: 1,
+    major: 'نظم المعلومات الإدارية',
+    instructor: '',
+    description_ar: '',
+    description_en: '',
+    prerequisites: '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCourses();
@@ -43,8 +37,8 @@ const AdminCoursesPage: React.FC = () => {
 
   const fetchCourses = async () => {
     try {
-      const coursesData = await getCourses();
-      setCourses(coursesData || []);
+      const data = await getCourses();
+      setCourses(data);
     } catch (error) {
       console.error('Error fetching courses:', error);
     } finally {
@@ -52,66 +46,75 @@ const AdminCoursesPage: React.FC = () => {
     }
   };
 
-  const onSubmit = async (data: CourseFormData) => {
-    setProcessing(true);
+  const handleSubmit = async () => {
+    setSubmitting(true);
     try {
+      const courseData = {
+        ...formData,
+        prerequisites: formData.prerequisites ? formData.prerequisites.split(',').map(p => p.trim()) : [],
+      };
+
       if (editingCourse) {
-        await updateCourse(editingCourse.id, data);
-        setMessage({ type: 'success', text: t('admin.courseUpdated') });
+        await updateCourse(editingCourse.id, courseData);
       } else {
-        await supabase.from('courses').insert({
-          ...data,
-          major: 'نظم المعلومات الإدارية',
-          schedule: { days: ['sunday', 'tuesday'], start_time: '10:00', end_time: '11:30' },
-          prerequisites: [],
-          enrolled_count: 0,
-        });
-        setMessage({ type: 'success', text: t('admin.courseAdded') });
+        await createCourse(courseData);
       }
-      
-      setShowModal(false);
-      setEditingCourse(null);
-      reset();
+
       fetchCourses();
+      closeModal();
     } catch (error) {
       console.error('Error saving course:', error);
-      setMessage({ type: 'error', text: t('common.error') });
     } finally {
-      setProcessing(false);
+      setSubmitting(false);
     }
   };
 
-  const handleDelete = async (courseId: string) => {
-    setProcessing(true);
+  const handleDelete = async (id: string) => {
     try {
-      await deleteCourse(courseId);
-      setMessage({ type: 'success', text: t('admin.courseDeleted') });
-      setDeleteConfirm(null);
+      await deleteCourse(id);
       fetchCourses();
+      setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting course:', error);
-      setMessage({ type: 'error', text: t('common.error') });
-    } finally {
-      setProcessing(false);
     }
   };
 
-  const openEditModal = (course: Course) => {
-    setEditingCourse(course);
-    reset({
-      course_code: course.course_code,
-      name_ar: course.name_ar,
-      name_en: course.name_en,
-      description_ar: course.description_ar,
-      description_en: course.description_en,
-      credit_hours: course.credit_hours,
-      level: course.level,
-      semester: course.semester,
-      instructor_name: course.instructor_name,
-      room_number: course.room_number,
-      max_students: course.max_students,
-    });
+  const openModal = (course?: Course) => {
+    if (course) {
+      setEditingCourse(course);
+      setFormData({
+        course_code: course.course_code,
+        name_ar: course.name_ar,
+        name_en: course.name_en,
+        credit_hours: course.credit_hours,
+        level: course.level,
+        major: course.major,
+        instructor: course.instructor || '',
+        description_ar: course.description_ar || '',
+        description_en: course.description_en || '',
+        prerequisites: course.prerequisites?.join(', ') || '',
+      });
+    } else {
+      setEditingCourse(null);
+      setFormData({
+        course_code: '',
+        name_ar: '',
+        name_en: '',
+        credit_hours: 3,
+        level: 1,
+        major: 'نظم المعلومات الإدارية',
+        instructor: '',
+        description_ar: '',
+        description_en: '',
+        prerequisites: '',
+      });
+    }
     setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingCourse(null);
   };
 
   const filteredCourses = courses.filter(course => {
@@ -120,7 +123,7 @@ const AdminCoursesPage: React.FC = () => {
       course.name_en.toLowerCase().includes(searchTerm.toLowerCase()) ||
       course.course_code.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesLevel = selectedLevel === 'all' || course.level === selectedLevel;
+    const matchesLevel = levelFilter === 'all' || course.level === Number(levelFilter);
     
     return matchesSearch && matchesLevel;
   });
@@ -128,7 +131,7 @@ const AdminCoursesPage: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="spinner" />
+        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-800 rounded-full animate-spin" />
       </div>
     );
   }
@@ -146,45 +149,13 @@ const AdminCoursesPage: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => {
-            setEditingCourse(null);
-            reset({});
-            setShowModal(true);
-          }}
-          className="btn-primary flex items-center gap-2"
+          onClick={() => openModal()}
+          className="flex items-center gap-2 bg-gradient-to-r from-primary-800 to-primary-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg"
         >
           <Plus className="w-5 h-5" />
           {t('admin.addCourse')}
         </button>
       </div>
-
-      {/* Message */}
-      <AnimatePresence>
-        {message && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className={`p-4 rounded-xl flex items-center gap-3 ${
-              message.type === 'success'
-                ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800'
-                : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
-            }`}
-          >
-            {message.type === 'success' ? (
-              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-            )}
-            <p className={message.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-              {message.text}
-            </p>
-            <button onClick={() => setMessage(null)} className="mr-auto">
-              <X className="w-5 h-5 text-gray-400" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row gap-4">
@@ -194,22 +165,22 @@ const AdminCoursesPage: React.FC = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={t('common.search')}
-            className="input-primary pr-12"
+            placeholder={language === 'ar' ? 'البحث عن مقرر...' : 'Search for a course...'}
+            className="w-full px-4 py-3 pr-12 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
           />
         </div>
         
         <div className="relative">
           <Filter className="absolute top-1/2 -translate-y-1/2 right-4 w-5 h-5 text-gray-400" />
           <select
-            value={selectedLevel}
-            onChange={(e) => setSelectedLevel(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            className="input-primary pr-12 appearance-none min-w-[200px]"
+            value={levelFilter}
+            onChange={(e) => setLevelFilter(e.target.value)}
+            className="w-full md:w-48 px-4 py-3 pr-12 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none appearance-none"
           >
-            <option value="all">{t('common.all')} المستويات</option>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((level) => (
+            <option value="all">{language === 'ar' ? 'جميع المستويات' : 'All Levels'}</option>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(level => (
               <option key={level} value={level}>
-                المستوى {level}
+                {language === 'ar' ? `المستوى ${level}` : `Level ${level}`}
               </option>
             ))}
           </select>
@@ -240,60 +211,56 @@ const AdminCoursesPage: React.FC = () => {
                     {t('courses.courseName')}
                   </th>
                   <th className="px-6 py-4 text-center text-sm font-medium text-gray-500 dark:text-gray-400">
-                    {t('courses.level')}
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-medium text-gray-500 dark:text-gray-400">
                     {t('courses.creditHours')}
                   </th>
-                  <th className="px-6 py-4 text-right text-sm font-medium text-gray-500 dark:text-gray-400">
-                    {t('courses.instructor')}
+                  <th className="px-6 py-4 text-center text-sm font-medium text-gray-500 dark:text-gray-400">
+                    {t('auth.level')}
                   </th>
                   <th className="px-6 py-4 text-center text-sm font-medium text-gray-500 dark:text-gray-400">
-                    {t('common.actions')}
+                    {language === 'ar' ? 'الإجراءات' : 'Actions'}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredCourses.map((course) => (
-                  <tr key={course.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                {filteredCourses.map((course, index) => (
+                  <motion.tr
+                    key={course.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                  >
                     <td className="px-6 py-4">
-                      <span className="font-medium text-primary-800 dark:text-primary-400">
+                      <span className="bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 px-3 py-1 rounded-lg text-sm font-medium">
                         {course.course_code}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {language === 'ar' ? course.name_ar : course.name_en}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="px-3 py-1 bg-gray-100 dark:bg-gray-600 rounded-full text-sm">
-                        {course.level}
-                      </span>
+                    <td className="px-6 py-4 text-gray-900 dark:text-white">
+                      {language === 'ar' ? course.name_ar : course.name_en}
                     </td>
                     <td className="px-6 py-4 text-center text-gray-600 dark:text-gray-400">
                       {course.credit_hours}
                     </td>
-                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
-                      {course.instructor_name}
+                    <td className="px-6 py-4 text-center text-gray-600 dark:text-gray-400">
+                      {course.level}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <button
-                          onClick={() => openEditModal(course)}
-                          className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                          onClick={() => openModal(course)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                         >
                           <Edit className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => setDeleteConfirm(course.id)}
-                          className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                          onClick={() => setShowDeleteConfirm(course.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
                       </div>
                     </td>
-                  </tr>
+                  </motion.tr>
                 ))}
               </tbody>
             </table>
@@ -308,143 +275,146 @@ const AdminCoursesPage: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-            onClick={() => setShowModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full p-6 my-8"
-              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
             >
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
-                {editingCourse ? t('admin.editCourse') : t('admin.addCourse')}
-              </h3>
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {editingCourse ? t('admin.editCourse') : t('admin.addCourse')}
+                </h3>
+                <button
+                  onClick={closeModal}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <div className="p-6 space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('courses.courseCode')}
+                      {t('courses.courseCode')} *
                     </label>
                     <input
-                      {...register('course_code', { required: t('errors.required') })}
-                      className="input-primary"
+                      type="text"
+                      value={formData.course_code}
+                      onChange={(e) => setFormData({ ...formData, course_code: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
                       placeholder="MIS101"
                     />
-                    {errors.course_code && (
-                      <p className="mt-1 text-sm text-red-600">{errors.course_code.message}</p>
-                    )}
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('courses.creditHours')}
+                      {t('courses.creditHours')} *
                     </label>
-                    <input
-                      type="number"
-                      {...register('credit_hours', { required: t('errors.required'), min: 1, max: 6 })}
-                      className="input-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      الاسم بالعربية
-                    </label>
-                    <input
-                      {...register('name_ar', { required: t('errors.required') })}
-                      className="input-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      الاسم بالإنجليزية
-                    </label>
-                    <input
-                      {...register('name_en', { required: t('errors.required') })}
-                      className="input-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('courses.level')}
-                    </label>
-                    <select {...register('level', { required: true })} className="input-primary">
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((level) => (
-                        <option key={level} value={level}>المستوى {level}</option>
+                    <select
+                      value={formData.credit_hours}
+                      onChange={(e) => setFormData({ ...formData, credit_hours: Number(e.target.value) })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                    >
+                      {[1, 2, 3, 4, 5].map(h => (
+                        <option key={h} value={h}>{h}</option>
                       ))}
                     </select>
                   </div>
+                </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {language === 'ar' ? 'اسم المقرر (عربي)' : 'Course Name (Arabic)'} *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name_ar}
+                    onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {language === 'ar' ? 'اسم المقرر (إنجليزي)' : 'Course Name (English)'} *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name_en}
+                    onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('courses.semester')}
+                      {t('auth.level')} *
                     </label>
-                    <select {...register('semester', { required: true })} className="input-primary">
-                      <option value="fall">{t('courses.fall')}</option>
-                      <option value="spring">{t('courses.spring')}</option>
-                      <option value="summer">{t('courses.summer')}</option>
+                    <select
+                      value={formData.level}
+                      onChange={(e) => setFormData({ ...formData, level: Number(e.target.value) })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(l => (
+                        <option key={l} value={l}>
+                          {language === 'ar' ? `المستوى ${l}` : `Level ${l}`}
+                        </option>
+                      ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {t('courses.instructor')}
                     </label>
-                    <input {...register('instructor_name')} className="input-primary" />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('courses.room')}
-                    </label>
-                    <input {...register('room_number')} className="input-primary" />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      {t('courses.maxStudents')}
-                    </label>
                     <input
-                      type="number"
-                      {...register('max_students', { min: 1 })}
-                      className="input-primary"
-                      defaultValue={30}
+                      type="text"
+                      value={formData.instructor}
+                      onChange={(e) => setFormData({ ...formData, instructor: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    الوصف بالعربية
+                    {t('courses.prerequisites')} ({language === 'ar' ? 'مفصولة بفاصلة' : 'comma-separated'})
                   </label>
-                  <textarea {...register('description_ar')} rows={2} className="input-primary resize-none" />
+                  <input
+                    type="text"
+                    value={formData.prerequisites}
+                    onChange={(e) => setFormData({ ...formData, prerequisites: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                    placeholder="MIS101, MIS102"
+                  />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    الوصف بالإنجليزية
-                  </label>
-                  <textarea {...register('description_en')} rows={2} className="input-primary resize-none" />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 btn-outline">
-                    {t('common.cancel')}
-                  </button>
-                  <button type="submit" disabled={processing} className="flex-1 btn-primary">
-                    {processing ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                    ) : (
-                      t('common.save')
-                    )}
-                  </button>
-                </div>
-              </form>
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 py-3 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting || !formData.course_code || !formData.name_ar || !formData.name_en}
+                  className="flex-1 bg-gradient-to-r from-primary-800 to-primary-700 text-white py-3 rounded-xl font-semibold hover:from-primary-700 hover:to-primary-600 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                >
+                  {submitting ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      {t('common.save')}
+                    </>
+                  )}
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -452,48 +422,41 @@ const AdminCoursesPage: React.FC = () => {
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
-        {deleteConfirm && (
+        {showDeleteConfirm && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setDeleteConfirm(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6"
-              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6"
             >
               <div className="text-center">
                 <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                   <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                  {t('admin.deleteCourse')}
+                  {language === 'ar' ? 'تأكيد الحذف' : 'Confirm Deletion'}
                 </h3>
                 <p className="text-gray-500 dark:text-gray-400 mb-6">
-                  {t('admin.deleteConfirm')}
+                  {language === 'ar' ? 'هل أنت متأكد من حذف هذا المقرر؟ لا يمكن التراجع عن هذا الإجراء.' : 'Are you sure you want to delete this course? This action cannot be undone.'}
                 </p>
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setDeleteConfirm(null)}
-                    className="flex-1 btn-outline"
+                    onClick={() => setShowDeleteConfirm(null)}
+                    className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 py-3 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                   >
                     {t('common.cancel')}
                   </button>
                   <button
-                    onClick={() => handleDelete(deleteConfirm)}
-                    disabled={processing}
-                    className="flex-1 bg-red-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-red-700 transition-colors"
+                    onClick={() => handleDelete(showDeleteConfirm)}
+                    className="flex-1 bg-red-600 text-white py-3 rounded-xl font-semibold hover:bg-red-700 transition-colors"
                   >
-                    {processing ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                    ) : (
-                      t('common.delete')
-                    )}
+                    {t('common.delete')}
                   </button>
                 </div>
               </div>
@@ -506,4 +469,3 @@ const AdminCoursesPage: React.FC = () => {
 };
 
 export default AdminCoursesPage;
-

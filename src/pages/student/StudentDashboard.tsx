@@ -1,23 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  BookOpen, TrendingUp, Clock, Bell, Calendar, 
+import {
+  BookOpen, TrendingUp, Calendar, Bell, Clock,
   CheckCircle, AlertCircle, ChevronLeft, ChevronRight,
-  FileText, ClipboardList
+  FileText, Award, Target, ArrowRight
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { getEnrollments, getRequests, getNotifications, calculateGPA } from '../../lib/supabase';
-import { Enrollment, Request, Notification } from '../../types';
+import { supabase, getEnrollments, calculateGPA, getRequests } from '../../lib/supabase';
+import { Enrollment, Request } from '../../types';
 
 const StudentDashboard: React.FC = () => {
   const { t, language, isRTL } = useLanguage();
   const { user } = useAuth();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [gpaData, setGpaData] = useState({ gpa: 0, completedCredits: 0, totalCredits: 0 });
+  const [gpaData, setGpaData] = useState({ gpa: 0, completedCredits: 0, totalCredits: 140 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,16 +25,14 @@ const StudentDashboard: React.FC = () => {
       if (!user) return;
       
       try {
-        const [enrollmentsData, requestsData, notificationsData, gpa] = await Promise.all([
-          getEnrollments(user.id, 'current'),
-          getRequests(undefined, user.id),
-          getNotifications(user.id),
+        const [enrollmentsData, requestsData, gpa] = await Promise.all([
+          getEnrollments(user.id),
+          getRequests(user.id),
           calculateGPA(user.id),
         ]);
         
         setEnrollments(enrollmentsData || []);
         setRequests(requestsData || []);
-        setNotifications(notificationsData || []);
         setGpaData(gpa);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -46,78 +44,73 @@ const StudentDashboard: React.FC = () => {
     fetchData();
   }, [user]);
 
-  const Arrow = isRTL ? ChevronLeft : ChevronRight;
+  const currentCourses = enrollments.filter(e => e.status === 'current');
+  const completedCourses = enrollments.filter(e => e.status === 'completed');
+  const pendingRequests = requests.filter(r => r.status === 'pending');
 
-  const stats = [
-    {
-      title: t('dashboard.gpa'),
-      value: gpaData.gpa.toFixed(2),
-      icon: TrendingUp,
-      color: 'bg-green-500',
-      bgColor: 'bg-green-100 dark:bg-green-900/30',
-    },
-    {
-      title: t('dashboard.completedCredits'),
-      value: gpaData.completedCredits,
-      icon: CheckCircle,
-      color: 'bg-blue-500',
-      bgColor: 'bg-blue-100 dark:bg-blue-900/30',
-    },
-    {
-      title: t('dashboard.currentCredits'),
-      value: enrollments.reduce((sum, e) => sum + (e.course?.credit_hours || 0), 0),
-      icon: BookOpen,
-      color: 'bg-purple-500',
-      bgColor: 'bg-purple-100 dark:bg-purple-900/30',
-    },
-    {
-      title: t('dashboard.pendingRequests'),
-      value: requests.filter(r => r.status === 'pending').length,
-      icon: Clock,
-      color: 'bg-yellow-500',
-      bgColor: 'bg-yellow-100 dark:bg-yellow-900/30',
-    },
+  const getGPAClassification = (gpa: number) => {
+    if (gpa >= 4.5) return { text: language === 'ar' ? 'ممتاز' : 'Excellent', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' };
+    if (gpa >= 3.75) return { text: language === 'ar' ? 'جيد جداً' : 'Very Good', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' };
+    if (gpa >= 2.75) return { text: language === 'ar' ? 'جيد' : 'Good', color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' };
+    if (gpa >= 2.0) return { text: language === 'ar' ? 'مقبول' : 'Acceptable', color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-900/30' };
+    return { text: language === 'ar' ? 'ضعيف' : 'Weak', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30' };
+  };
+
+  const classification = getGPAClassification(gpaData.gpa);
+
+  const progressData = [
+    { name: language === 'ar' ? 'منجز' : 'Completed', value: gpaData.completedCredits },
+    { name: language === 'ar' ? 'متبقي' : 'Remaining', value: gpaData.totalCredits - gpaData.completedCredits },
   ];
 
-  const quickActions = [
-    { title: t('dashboard.registerCourses'), icon: BookOpen, to: '/student/courses', color: 'from-primary-600 to-primary-800' },
-    { title: t('dashboard.viewSchedule'), icon: Calendar, to: '/student/schedule', color: 'from-blue-600 to-blue-800' },
-    { title: t('dashboard.viewTranscript'), icon: FileText, to: '/student/transcript', color: 'from-purple-600 to-purple-800' },
-    { title: t('nav.requests'), icon: ClipboardList, to: '/student/requests', color: 'from-orange-600 to-orange-800' },
+  const COLORS = ['#184A2C', '#e5e7eb'];
+
+  const semesterGPAs = [
+    { name: '1', gpa: 4.2 },
+    { name: '2', gpa: 4.5 },
+    { name: '3', gpa: 4.3 },
+    { name: '4', gpa: 4.6 },
+    { name: '5', gpa: 4.4 },
   ];
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="spinner" />
+        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-800 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Welcome Header */}
+    <div className="space-y-6">
+      {/* Welcome Section */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-r from-primary-800 to-primary-600 rounded-2xl p-6 md:p-8 text-white"
+        className="bg-gradient-to-r from-primary-800 via-primary-700 to-primary-800 rounded-3xl p-8 text-white relative overflow-hidden"
       >
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-secondary-500 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-secondary-500 rounded-full translate-y-1/2 -translate-x-1/2" />
+        </div>
+
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">
-              {t('dashboard.welcome')}، {user?.full_name} 👋
-            </h1>
+            <p className="text-white/80 mb-1">
+              {language === 'ar' ? 'مرحباً بك،' : 'Welcome back,'}
+            </p>
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">{user?.full_name}</h1>
             <p className="text-white/80">
-              {language === 'ar' 
-                ? `المستوى ${user?.level} - نظم المعلومات الإدارية`
-                : `Level ${user?.level} - Management Information Systems`
-              }
+              {user?.student_id} • {language === 'ar' ? `المستوى ${user?.level}` : `Level ${user?.level}`}
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
-              <p className="text-3xl font-bold">{gpaData.gpa.toFixed(2)}</p>
-              <p className="text-sm text-white/70">{t('dashboard.gpa')}</p>
+            <div className={`${classification.bg} rounded-2xl px-6 py-3`}>
+              <p className={`text-lg font-bold ${classification.color}`}>{classification.text}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {language === 'ar' ? 'التقدير العام' : 'Overall Grade'}
+              </p>
             </div>
           </div>
         </div>
@@ -125,83 +118,228 @@ const StudentDashboard: React.FC = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        {stats.map((stat, index) => (
-          <motion.div
-            key={index}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
-          >
-            <div className={`w-12 h-12 ${stat.bgColor} rounded-xl flex items-center justify-center mb-4`}>
-              <stat.icon className={`w-6 h-6 ${stat.color.replace('bg-', 'text-')}`} />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <BookOpen className="w-6 h-6 text-white" />
             </div>
-            <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1">
-              {stat.value}
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{stat.title}</p>
-          </motion.div>
-        ))}
+            <span className="text-sm text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-lg">
+              {language === 'ar' ? 'حالي' : 'Current'}
+            </span>
+          </div>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white">{currentCourses.length}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('dashboard.currentCourses')}</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/30">
+              <TrendingUp className="w-6 h-6 text-white" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white">{gpaData.gpa.toFixed(2)}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('dashboard.gpa')}</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/30">
+              <Award className="w-6 h-6 text-white" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white">{gpaData.completedCredits}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('dashboard.completedCredits')}</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/30">
+              <Clock className="w-6 h-6 text-white" />
+            </div>
+            {pendingRequests.length > 0 && (
+              <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                {pendingRequests.length}
+              </span>
+            )}
+          </div>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white">{pendingRequests.length}</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('dashboard.pendingRequests')}</p>
+        </motion.div>
       </div>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-      >
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-          {t('dashboard.quickActions')}
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {quickActions.map((action, index) => (
-            <Link
-              key={index}
-              to={action.to}
-              className={`bg-gradient-to-br ${action.color} text-white rounded-2xl p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}
-            >
-              <action.icon className="w-8 h-8 mb-4" />
-              <p className="font-semibold">{action.title}</p>
-            </Link>
-          ))}
-        </div>
-      </motion.div>
-
+      {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Current Courses */}
+        {/* Progress Chart */}
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
         >
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5 text-primary-600" />
+            {language === 'ar' ? 'التقدم الأكاديمي' : 'Academic Progress'}
+          </h3>
+          <div className="flex items-center gap-8">
+            <div className="w-40 h-40">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={progressData}
+                    innerRadius={50}
+                    outerRadius={70}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {progressData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index]} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex-1">
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-600 dark:text-gray-400">{language === 'ar' ? 'الساعات المنجزة' : 'Completed Credits'}</span>
+                    <span className="font-bold text-primary-600">{gpaData.completedCredits}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-primary-600 rounded-full h-2 transition-all duration-500"
+                      style={{ width: `${(gpaData.completedCredits / gpaData.totalCredits) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-600 dark:text-gray-400">{language === 'ar' ? 'الساعات المتبقية' : 'Remaining Credits'}</span>
+                    <span className="font-bold text-gray-400">{gpaData.totalCredits - gpaData.completedCredits}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-gray-400 rounded-full h-2 transition-all duration-500"
+                      style={{ width: `${((gpaData.totalCredits - gpaData.completedCredits) / gpaData.totalCredits) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="mt-4 text-center text-2xl font-bold text-primary-600">
+                {Math.round((gpaData.completedCredits / gpaData.totalCredits) * 100)}%
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* GPA Trend */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
+        >
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-primary-600" />
+            {language === 'ar' ? 'تطور المعدل' : 'GPA Trend'}
+          </h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={semesterGPAs}>
+              <defs>
+                <linearGradient id="gpaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#184A2C" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#184A2C" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="name" axisLine={false} tickLine={false} />
+              <YAxis domain={[0, 5]} axisLine={false} tickLine={false} />
+              <Tooltip 
+                contentStyle={{ 
+                  background: 'rgba(255,255,255,0.9)', 
+                  border: 'none', 
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                }}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="gpa" 
+                stroke="#184A2C" 
+                strokeWidth={3}
+                fill="url(#gpaGradient)" 
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </motion.div>
+      </div>
+
+      {/* Current Courses & Quick Actions */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Current Courses */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
+        >
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              {t('courses.registered')}
-            </h2>
-            <Link
-              to="/student/registered"
-              className="text-primary-800 dark:text-primary-400 text-sm font-medium hover:underline flex items-center gap-1"
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-primary-600" />
+              {t('dashboard.currentCourses')}
+            </h3>
+            <Link 
+              to="/student/registered" 
+              className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center gap-1"
             >
-              {t('common.viewDetails')}
-              <Arrow className="w-4 h-4" />
+              {t('common.viewAll')}
+              {isRTL ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </Link>
           </div>
 
-          {enrollments.length === 0 ? (
+          {currentCourses.length === 0 ? (
             <div className="text-center py-8">
               <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500 dark:text-gray-400">{t('common.noData')}</p>
+              <Link
+                to="/student/courses"
+                className="mt-4 inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium"
+              >
+                {language === 'ar' ? 'سجل مقرراتك الآن' : 'Register courses now'}
+                <ArrowRight className={`w-4 h-4 ${isRTL ? 'rotate-180' : ''}`} />
+              </Link>
             </div>
           ) : (
             <div className="space-y-3">
-              {enrollments.slice(0, 4).map((enrollment, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
+              {currentCourses.slice(0, 4).map((enrollment, index) => (
+                <motion.div
+                  key={enrollment.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.8 + index * 0.1 }}
+                  className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
-                  <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center">
-                    <BookOpen className="w-5 h-5 text-primary-800 dark:text-primary-400" />
+                  <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-xl flex items-center justify-center">
+                    <BookOpen className="w-6 h-6 text-primary-600 dark:text-primary-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 dark:text-white truncate">
@@ -211,150 +349,120 @@ const StudentDashboard: React.FC = () => {
                       {enrollment.course?.course_code} • {enrollment.course?.credit_hours} {t('courses.creditHours')}
                     </p>
                   </div>
-                </div>
+                  <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-sm rounded-full">
+                    {language === 'ar' ? 'مسجل' : 'Registered'}
+                  </span>
+                </motion.div>
               ))}
             </div>
           )}
         </motion.div>
 
-        {/* Recent Notifications */}
+        {/* Quick Actions */}
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.6 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
         >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              {t('notifications.title')}
-            </h2>
-            <span className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-medium px-2 py-1 rounded-full">
-              {notifications.filter(n => !n.is_read).length} {language === 'ar' ? 'جديد' : 'new'}
-            </span>
-          </div>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">
+            {language === 'ar' ? 'إجراءات سريعة' : 'Quick Actions'}
+          </h3>
+          <div className="space-y-3">
+            <Link
+              to="/student/courses"
+              className="flex items-center gap-4 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors group"
+            >
+              <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <BookOpen className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-primary-800 dark:text-primary-400">
+                {language === 'ar' ? 'تسجيل مقررات' : 'Register Courses'}
+              </span>
+            </Link>
 
-          {notifications.length === 0 ? (
-            <div className="text-center py-8">
-              <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400">{t('notifications.noNotifications')}</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {notifications.slice(0, 4).map((notification, index) => (
-                <div
-                  key={index}
-                  className={`flex items-start gap-4 p-4 rounded-xl ${
-                    notification.is_read 
-                      ? 'bg-gray-50 dark:bg-gray-700/50' 
-                      : 'bg-primary-50 dark:bg-primary-900/20'
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    notification.type === 'success' 
-                      ? 'bg-green-100 dark:bg-green-900/30' 
-                      : notification.type === 'error'
-                      ? 'bg-red-100 dark:bg-red-900/30'
-                      : notification.type === 'warning'
-                      ? 'bg-yellow-100 dark:bg-yellow-900/30'
-                      : 'bg-blue-100 dark:bg-blue-900/30'
-                  }`}>
-                    {notification.type === 'success' ? (
-                      <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    ) : notification.type === 'error' ? (
-                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                    ) : (
-                      <Bell className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {language === 'ar' ? notification.title_ar : notification.title_en}
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                      {language === 'ar' ? notification.message_ar : notification.message_en}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+            <Link
+              to="/student/schedule"
+              className="flex items-center gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors group"
+            >
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Calendar className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-blue-800 dark:text-blue-400">
+                {language === 'ar' ? 'عرض الجدول' : 'View Schedule'}
+              </span>
+            </Link>
+
+            <Link
+              to="/student/transcript"
+              className="flex items-center gap-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors group"
+            >
+              <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-purple-800 dark:text-purple-400">
+                {language === 'ar' ? 'السجل الأكاديمي' : 'Academic Record'}
+              </span>
+            </Link>
+
+            <Link
+              to="/student/gpa"
+              className="flex items-center gap-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors group"
+            >
+              <div className="w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <TrendingUp className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-green-800 dark:text-green-400">
+                {language === 'ar' ? 'حاسبة المعدل' : 'GPA Calculator'}
+              </span>
+            </Link>
+          </div>
         </motion.div>
       </div>
 
-      {/* Recent Requests */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7 }}
-        className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg"
-      >
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-            {t('dashboard.recentActivity')}
-          </h2>
+      {/* Pending Requests */}
+      {pendingRequests.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.9 }}
+          className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <AlertCircle className="w-6 h-6 text-yellow-600" />
+            <h3 className="text-lg font-bold text-yellow-800 dark:text-yellow-400">
+              {language === 'ar' ? 'طلبات بانتظار الموافقة' : 'Pending Requests'}
+            </h3>
+          </div>
+          <div className="space-y-2">
+            {pendingRequests.map((request) => (
+              <div
+                key={request.id}
+                className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-xl"
+              >
+                <div className="flex items-center gap-3">
+                  <Clock className="w-5 h-5 text-yellow-600" />
+                  <span className="text-gray-900 dark:text-white">
+                    {language === 'ar' ? request.course?.name_ar : request.course?.name_en}
+                  </span>
+                </div>
+                <span className="text-sm text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 px-3 py-1 rounded-full">
+                  {t('common.pending')}
+                </span>
+              </div>
+            ))}
+          </div>
           <Link
             to="/student/requests"
-            className="text-primary-800 dark:text-primary-400 text-sm font-medium hover:underline flex items-center gap-1"
+            className="mt-4 inline-flex items-center gap-2 text-yellow-700 dark:text-yellow-400 font-medium hover:underline"
           >
-            {t('common.viewDetails')}
-            <Arrow className="w-4 h-4" />
+            {language === 'ar' ? 'عرض جميع الطلبات' : 'View all requests'}
+            {isRTL ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </Link>
-        </div>
-
-        {requests.length === 0 ? (
-          <div className="text-center py-8">
-            <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">{t('requests.noRequests')}</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-gray-500 dark:text-gray-400 text-sm">
-                  <th className="text-right pb-4">{t('courses.courseName')}</th>
-                  <th className="text-right pb-4">{t('requests.requestType')}</th>
-                  <th className="text-right pb-4">{t('common.status')}</th>
-                  <th className="text-right pb-4">{t('common.date')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.slice(0, 5).map((request, index) => (
-                  <tr key={index} className="border-t border-gray-200 dark:border-gray-700">
-                    <td className="py-4">
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {language === 'ar' ? request.course?.name_ar : request.course?.name_en}
-                      </p>
-                      <p className="text-sm text-gray-500">{request.course?.course_code}</p>
-                    </td>
-                    <td className="py-4">
-                      <span className="text-gray-600 dark:text-gray-300">
-                        {t(`requests.${request.request_type}`)}
-                      </span>
-                    </td>
-                    <td className="py-4">
-                      <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                        request.status === 'approved' 
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                          : request.status === 'rejected'
-                          ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                          : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
-                      }`}>
-                        {t(`requests.${request.status}`)}
-                      </span>
-                    </td>
-                    <td className="py-4 text-gray-500 dark:text-gray-400">
-                      {new Date(request.created_at).toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 };
 
 export default StudentDashboard;
-

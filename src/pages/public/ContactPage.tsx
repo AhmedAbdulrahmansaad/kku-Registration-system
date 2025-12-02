@@ -1,282 +1,264 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { 
   Mail, Phone, MapPin, Send, Clock, 
-  CheckCircle, MessageSquare, Facebook, Twitter, Linkedin
+  CheckCircle, MessageSquare, Globe
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-interface ContactFormData {
-  name: string;
-  email: string;
-  subject: string;
-  message: string;
-}
-
 const ContactPage: React.FC = () => {
-  const { t } = useLanguage();
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { language } = useLanguage();
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: '',
+  });
+  const [submitted, setSubmitted] = useState(false);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<ContactFormData>();
-
-  const onSubmit = async (data: ContactFormData) => {
-    setLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    console.log('Contact form data:', data);
-    setSuccess(true);
-    reset();
-    setLoading(false);
-
-    setTimeout(() => setSuccess(false), 5000);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Simulate form submission
+    setSubmitted(true);
+    setFormData({ name: '', email: '', subject: '', message: '' });
   };
 
   const contactInfo = [
     {
       icon: MapPin,
-      title: t('contact.address'),
-      value: 'أبها، منطقة عسير، المملكة العربية السعودية',
+      title_ar: 'العنوان',
+      title_en: 'Address',
+      value_ar: 'أبها، المملكة العربية السعودية',
+      value_en: 'Abha, Saudi Arabia',
     },
     {
       icon: Phone,
-      title: t('contact.phone'),
-      value: '+966 17 241 8888',
+      title_ar: 'الهاتف',
+      title_en: 'Phone',
+      value_ar: '+966 17 241 1111',
+      value_en: '+966 17 241 1111',
     },
     {
       icon: Mail,
-      title: t('common.email'),
-      value: 'mis@kku.edu.sa',
+      title_ar: 'البريد الإلكتروني',
+      title_en: 'Email',
+      value_ar: 'mis@kku.edu.sa',
+      value_en: 'mis@kku.edu.sa',
     },
     {
       icon: Clock,
-      title: t('contact.workingHours'),
-      value: 'الأحد - الخميس: 8:00 ص - 4:00 م',
+      title_ar: 'ساعات العمل',
+      title_en: 'Working Hours',
+      value_ar: 'الأحد - الخميس: 8 ص - 4 م',
+      value_en: 'Sun - Thu: 8 AM - 4 PM',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
       {/* Hero Section */}
-      <section className="relative py-20 bg-gradient-to-br from-primary-800 to-primary-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section className="relative py-20 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900" />
+        
+        <div 
+          className="absolute inset-0 opacity-5"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}
+        />
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <MessageSquare className="w-10 h-10 text-white" />
+            <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-full px-6 py-3 mb-8">
+              <MessageSquare className="w-6 h-6 text-secondary-400" />
+              <span className="text-white font-medium">
+                {language === 'ar' ? 'نحن هنا لمساعدتك' : 'We are here to help'}
+              </span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              {t('contact.title')}
+            
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6">
+              {language === 'ar' ? 'اتصل بنا' : 'Contact Us'}
             </h1>
+            
             <p className="text-xl text-white/80 max-w-2xl mx-auto">
-              {t('contact.description')}
+              {language === 'ar' 
+                ? 'لديك سؤال أو استفسار؟ لا تتردد في التواصل معنا وسنرد عليك في أقرب وقت'
+                : 'Have a question or inquiry? Feel free to contact us and we will respond as soon as possible'}
             </p>
           </motion.div>
         </div>
       </section>
 
       {/* Contact Section */}
-      <section className="py-20">
+      <section className="py-20 -mt-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12">
-            {/* Contact Form */}
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8"
-            >
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                أرسل رسالتك
-              </h2>
-
-              {success && (
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Contact Info Cards */}
+            <div className="lg:col-span-1 space-y-4">
+              {contactInfo.map((info, index) => (
                 <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mb-6 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl flex items-center gap-3"
+                  key={index}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300"
                 >
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <p className="text-green-600 dark:text-green-400">{t('contact.sendSuccess')}</p>
-                </motion.div>
-              )}
-
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {t('contact.name')}
-                  </label>
-                  <input
-                    type="text"
-                    {...register('name', { required: t('errors.required') })}
-                    className="input-primary"
-                    placeholder="أدخل اسمك"
-                  />
-                  {errors.name && (
-                    <p className="mt-2 text-sm text-red-600">{errors.name.message}</p>
-                  )}
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {t('contact.email')}
-                  </label>
-                  <input
-                    type="email"
-                    {...register('email', { 
-                      required: t('errors.required'),
-                      pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: t('errors.invalidEmail'),
-                      }
-                    })}
-                    className="input-primary"
-                    placeholder="example@email.com"
-                  />
-                  {errors.email && (
-                    <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
-                  )}
-                </div>
-
-                {/* Subject */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {t('contact.subject')}
-                  </label>
-                  <input
-                    type="text"
-                    {...register('subject', { required: t('errors.required') })}
-                    className="input-primary"
-                    placeholder="موضوع الرسالة"
-                  />
-                  {errors.subject && (
-                    <p className="mt-2 text-sm text-red-600">{errors.subject.message}</p>
-                  )}
-                </div>
-
-                {/* Message */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {t('contact.message')}
-                  </label>
-                  <textarea
-                    {...register('message', { required: t('errors.required') })}
-                    rows={5}
-                    className="input-primary resize-none"
-                    placeholder="اكتب رسالتك هنا..."
-                  />
-                  {errors.message && (
-                    <p className="mt-2 text-sm text-red-600">{errors.message.message}</p>
-                  )}
-                </div>
-
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full btn-primary flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Send className="w-5 h-5" />
-                      {t('contact.send')}
-                    </>
-                  )}
-                </button>
-              </form>
-            </motion.div>
-
-            {/* Contact Info */}
-            <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="space-y-8"
-            >
-              {/* Info Cards */}
-              <div className="space-y-4">
-                {contactInfo.map((info, index) => (
-                  <div
-                    key={index}
-                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 flex items-center gap-4"
-                  >
+                  <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-primary-100 dark:bg-primary-900/30 rounded-xl flex items-center justify-center">
-                      <info.icon className="w-7 h-7 text-primary-800 dark:text-primary-400" />
+                      <info.icon className="w-7 h-7 text-primary-600 dark:text-primary-400" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{info.title}</p>
-                      <p className="font-semibold text-gray-900 dark:text-white">{info.value}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+                        {language === 'ar' ? info.title_ar : info.title_en}
+                      </p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {language === 'ar' ? info.value_ar : info.value_en}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
+                </motion.div>
+              ))}
 
-              {/* Map Placeholder */}
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
-                <img
-                  src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=600&h=300&fit=crop"
-                  alt="Map"
-                  className="w-full h-48 object-cover"
-                />
-                <div className="p-6">
-                  <h3 className="font-bold text-gray-900 dark:text-white mb-2">
-                    جامعة الملك خالد
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    كلية إدارة الأعمال - قسم نظم المعلومات الإدارية
-                  </p>
-                </div>
-              </div>
-
-              {/* Social Media */}
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-                <h3 className="font-bold text-gray-900 dark:text-white mb-4">
-                  {t('contact.socialMedia')}
+              {/* Social Links */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 }}
+                className="bg-gradient-to-br from-primary-800 to-primary-600 rounded-2xl p-6 text-white"
+              >
+                <h3 className="font-bold text-lg mb-4">
+                  {language === 'ar' ? 'تابعنا' : 'Follow Us'}
                 </h3>
-                <div className="flex gap-4">
-                  <a
-                    href="https://twitter.com/KikiNewsUniv"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-12 h-12 bg-gray-100 dark:bg-gray-700 hover:bg-primary-800 hover:text-white rounded-xl flex items-center justify-center transition-colors"
-                  >
-                    <Twitter className="w-6 h-6" />
-                  </a>
-                  <a
-                    href="https://www.facebook.com/KKUofficial"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-12 h-12 bg-gray-100 dark:bg-gray-700 hover:bg-primary-800 hover:text-white rounded-xl flex items-center justify-center transition-colors"
-                  >
-                    <Facebook className="w-6 h-6" />
-                  </a>
-                  <a
-                    href="https://www.linkedin.com/school/king-khalid-university"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-12 h-12 bg-gray-100 dark:bg-gray-700 hover:bg-primary-800 hover:text-white rounded-xl flex items-center justify-center transition-colors"
-                  >
-                    <Linkedin className="w-6 h-6" />
-                  </a>
+                <div className="flex gap-3">
+                  {['facebook', 'twitter', 'linkedin', 'instagram'].map((social) => (
+                    <a
+                      key={social}
+                      href="#"
+                      className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-colors"
+                    >
+                      <Globe className="w-5 h-5" />
+                    </a>
+                  ))}
                 </div>
-              </div>
+              </motion.div>
+            </div>
+
+            {/* Contact Form */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8"
+            >
+              {submitted ? (
+                <div className="text-center py-12">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="w-24 h-24 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6"
+                  >
+                    <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400" />
+                  </motion.div>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                    {language === 'ar' ? 'شكراً لتواصلك!' : 'Thank you for contacting us!'}
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-6">
+                    {language === 'ar' 
+                      ? 'تم استلام رسالتك وسنرد عليك في أقرب وقت'
+                      : 'Your message has been received and we will respond soon'}
+                  </p>
+                  <button
+                    onClick={() => setSubmitted(false)}
+                    className="bg-primary-800 text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary-700 transition-colors"
+                  >
+                    {language === 'ar' ? 'إرسال رسالة أخرى' : 'Send Another Message'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                    {language === 'ar' ? 'أرسل لنا رسالة' : 'Send us a Message'}
+                  </h2>
+
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          {language === 'ar' ? 'الاسم' : 'Name'} *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none"
+                          placeholder={language === 'ar' ? 'أدخل اسمك' : 'Enter your name'}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          {language === 'ar' ? 'البريد الإلكتروني' : 'Email'} *
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none"
+                          placeholder="example@email.com"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {language === 'ar' ? 'الموضوع' : 'Subject'} *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.subject}
+                        onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none"
+                        placeholder={language === 'ar' ? 'موضوع الرسالة' : 'Message subject'}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        {language === 'ar' ? 'الرسالة' : 'Message'} *
+                      </label>
+                      <textarea
+                        required
+                        rows={5}
+                        value={formData.message}
+                        onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none resize-none"
+                        placeholder={language === 'ar' ? 'اكتب رسالتك هنا...' : 'Write your message here...'}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-primary-800 to-primary-700 text-white py-4 rounded-xl font-semibold hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg shadow-primary-800/30 flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-5 h-5" />
+                      {language === 'ar' ? 'إرسال الرسالة' : 'Send Message'}
+                    </button>
+                  </form>
+                </>
+              )}
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="py-20 bg-white dark:bg-gray-800">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* Map Section */}
+      <section className="py-16 bg-white dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -284,41 +266,24 @@ const ContactPage: React.FC = () => {
             className="text-center mb-12"
           >
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-              الأسئلة الشائعة
+              {language === 'ar' ? 'موقعنا' : 'Our Location'}
             </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              {language === 'ar' ? 'جامعة الملك خالد - أبها' : 'King Khalid University - Abha'}
+            </p>
           </motion.div>
 
-          <div className="space-y-4">
-            {[
-              {
-                q: 'كيف يمكنني تسجيل المقررات؟',
-                a: 'بعد تسجيل الدخول، اذهب إلى صفحة "المقررات المتاحة" واختر المقررات التي تريد تسجيلها، ثم أرسل الطلب للموافقة.',
-              },
-              {
-                q: 'كيف يتم حساب المعدل التراكمي؟',
-                a: 'يتم حساب المعدل بضرب نقاط كل مقرر في عدد ساعاته المعتمدة، ثم قسمة المجموع على إجمالي الساعات.',
-              },
-              {
-                q: 'ماذا أفعل إذا نسيت كلمة المرور؟',
-                a: 'اضغط على رابط "نسيت كلمة المرور" في صفحة تسجيل الدخول وأدخل بريدك الإلكتروني لاستلام رابط إعادة التعيين.',
-              },
-              {
-                q: 'كيف يمكنني التواصل مع المشرف الأكاديمي؟',
-                a: 'يمكنك إرسال ملاحظات مع طلب التسجيل، أو استخدام المساعد الذكي للحصول على إجابات فورية.',
-              },
-            ].map((faq, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                viewport={{ once: true }}
-                className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6"
-              >
-                <h3 className="font-bold text-gray-900 dark:text-white mb-2">{faq.q}</h3>
-                <p className="text-gray-600 dark:text-gray-400">{faq.a}</p>
-              </motion.div>
-            ))}
+          <div className="bg-gray-200 dark:bg-gray-700 rounded-2xl overflow-hidden h-96 relative">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <MapPin className="w-16 h-16 text-primary-600 mx-auto mb-4" />
+                <p className="text-gray-600 dark:text-gray-400">
+                  {language === 'ar' 
+                    ? 'جامعة الملك خالد، أبها، المملكة العربية السعودية'
+                    : 'King Khalid University, Abha, Saudi Arabia'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -327,4 +292,3 @@ const ContactPage: React.FC = () => {
 };
 
 export default ContactPage;
-

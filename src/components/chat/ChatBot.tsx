@@ -1,269 +1,261 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, Bot, User, Loader2 } from 'lucide-react';
+import { 
+  MessageCircle, X, Send, Bot, User, 
+  Loader2, Minimize2, Maximize2
+} from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { ChatMessage } from '../../types';
+
+interface Message {
+  id: string;
+  text: string;
+  sender: 'user' | 'bot';
+  timestamp: Date;
+}
 
 const ChatBot: React.FC = () => {
-  const { t, language, isRTL } = useLanguage();
-  const { user } = useAuth();
+  const { language, isRTL } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
-      setMessages([
-        {
-          id: '1',
-          role: 'assistant',
-          content: t('chatbot.welcome'),
-          timestamp: new Date(),
-        },
-      ]);
-    }
-  }, [isOpen, t]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    setIsLoading(true);
-
-    try {
-      // Call OpenAI API through Supabase Edge Function
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            message: input,
-            language,
-            context: {
-              userRole: user?.role,
-              userName: user?.full_name,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('API request failed');
-      }
-
-      const data = await response.json();
-
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.reply || getLocalResponse(input),
+      // Welcome message
+      const welcomeMessage: Message = {
+        id: 'welcome',
+        text: language === 'ar' 
+          ? 'مرحباً! أنا المساعد الذكي لنظام تسجيل المقررات. كيف يمكنني مساعدتك اليوم؟\n\nيمكنني مساعدتك في:\n• معلومات عن المقررات\n• كيفية التسجيل\n• حساب المعدل التراكمي\n• الأسئلة الشائعة'
+          : "Hello! I'm the smart assistant for the course registration system. How can I help you today?\n\nI can help you with:\n• Course information\n• Registration process\n• GPA calculation\n• FAQs",
+        sender: 'bot',
         timestamp: new Date(),
       };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      // Fallback to local responses if API fails
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: getLocalResponse(input),
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } finally {
-      setIsLoading(false);
+      setMessages([welcomeMessage]);
     }
-  };
+  }, [isOpen, language]);
 
-  const getLocalResponse = (query: string): string => {
-    const lowerQuery = query.toLowerCase();
+  const getBotResponse = (userMessage: string): string => {
+    const lowerMessage = userMessage.toLowerCase();
     
     // Arabic responses
     if (language === 'ar') {
-      if (lowerQuery.includes('تسجيل') || lowerQuery.includes('مقرر')) {
-        return 'لتسجيل المقررات، اذهب إلى صفحة "المقررات المتاحة" واختر المقررات التي تريد تسجيلها. تأكد من استيفاء المتطلبات السابقة وعدم وجود تعارض في الجدول.';
+      if (lowerMessage.includes('تسجيل') || lowerMessage.includes('سجل')) {
+        return 'لتسجيل المقررات:\n1. اذهب إلى صفحة "المقررات"\n2. اختر المقررات المناسبة لمستواك\n3. اضغط على "تسجيل"\n4. انتظر موافقة المرشد الأكاديمي\n\nتأكد من استيفاء المتطلبات السابقة قبل التسجيل.';
       }
-      if (lowerQuery.includes('معدل') || lowerQuery.includes('gpa')) {
-        return 'يتم حساب المعدل التراكمي بضرب نقاط كل مقرر في عدد ساعاته، ثم قسمة المجموع على إجمالي الساعات. نظام الدرجات: A+ = 5.0, A = 4.75, B+ = 4.5, B = 4.0, C+ = 3.5, C = 3.0, D+ = 2.5, D = 2.0, F = 0';
+      if (lowerMessage.includes('معدل') || lowerMessage.includes('gpa')) {
+        return 'لحساب المعدل التراكمي:\n\nنظام الدرجات:\n• A+ = 5.0\n• A = 4.75\n• B+ = 4.5\n• B = 4.0\n• C+ = 3.5\n• C = 3.0\n• D+ = 2.5\n• D = 2.0\n• F = 0\n\nالمعدل = (مجموع النقاط × الساعات) ÷ إجمالي الساعات';
       }
-      if (lowerQuery.includes('متطلب') || lowerQuery.includes('سابق')) {
-        return 'المتطلبات السابقة هي المقررات التي يجب إنهاؤها بنجاح قبل التسجيل في مقرر معين. يمكنك معرفة المتطلبات السابقة لكل مقرر من صفحة تفاصيل المقرر.';
+      if (lowerMessage.includes('متطلب') || lowerMessage.includes('prerequisite')) {
+        return 'المتطلبات السابقة هي مقررات يجب اجتيازها قبل التسجيل في مقرر معين.\n\nللتحقق من المتطلبات:\n1. افتح صفحة المقررات\n2. اضغط على المقرر لرؤية التفاصيل\n3. ستظهر المتطلبات السابقة إن وجدت';
       }
-      if (lowerQuery.includes('حذف') || lowerQuery.includes('انسحاب')) {
-        return 'يمكنك حذف المقرر خلال فترة الحذف والإضافة دون أي أثر على السجل الأكاديمي. أما الانسحاب فيكون بعد انتهاء فترة الحذف ويظهر في السجل برمز W.';
+      if (lowerMessage.includes('مرشد') || lowerMessage.includes('advisor')) {
+        return 'المرشد الأكاديمي مسؤول عن:\n• الموافقة على طلبات التسجيل\n• تقديم النصح الأكاديمي\n• متابعة تقدمك الدراسي\n\nيمكنك التواصل مع مرشدك من خلال النظام.';
       }
-      if (lowerQuery.includes('جدول') || lowerQuery.includes('محاضرات')) {
-        return 'يمكنك الاطلاع على جدولك الأسبوعي من صفحة "الجدول الأسبوعي" في لوحة التحكم. يعرض الجدول جميع المقررات المسجلة مع أوقاتها وقاعاتها.';
+      if (lowerMessage.includes('جدول') || lowerMessage.includes('schedule')) {
+        return 'لعرض جدولك الدراسي:\n1. اذهب إلى "الجدول" من القائمة الجانبية\n2. سيظهر جدولك الأسبوعي\n3. يمكنك طباعة الجدول أو تحميله';
       }
-      return 'شكراً لتواصلك! أنا المساعد الذكي لنظام تسجيل المقررات. يمكنني مساعدتك في:\n- تسجيل المقررات\n- حساب المعدل التراكمي\n- شرح المتطلبات السابقة\n- معلومات عن الجدول الدراسي\n\nكيف يمكنني مساعدتك؟';
+      return 'شكراً على سؤالك! للحصول على مساعدة أفضل، يمكنك:\n• السؤال عن تسجيل المقررات\n• الاستفسار عن المعدل التراكمي\n• معرفة المتطلبات السابقة\n• الاستفسار عن الجدول الدراسي\n\nأو تواصل مع الدعم الفني للمزيد من المساعدة.';
     }
     
     // English responses
-    if (lowerQuery.includes('register') || lowerQuery.includes('course')) {
-      return 'To register for courses, go to the "Available Courses" page and select the courses you want to enroll in. Make sure you meet the prerequisites and there are no schedule conflicts.';
+    if (lowerMessage.includes('register') || lowerMessage.includes('registration')) {
+      return 'To register for courses:\n1. Go to the "Courses" page\n2. Select courses appropriate for your level\n3. Click "Register"\n4. Wait for advisor approval\n\nMake sure to complete prerequisites before registering.';
     }
-    if (lowerQuery.includes('gpa') || lowerQuery.includes('grade')) {
-      return 'GPA is calculated by multiplying each course\'s grade points by its credit hours, then dividing the sum by total credits. Grading scale: A+ = 5.0, A = 4.75, B+ = 4.5, B = 4.0, C+ = 3.5, C = 3.0, D+ = 2.5, D = 2.0, F = 0';
+    if (lowerMessage.includes('gpa') || lowerMessage.includes('grade')) {
+      return 'GPA Calculation:\n\nGrading System:\n• A+ = 5.0\n• A = 4.75\n• B+ = 4.5\n• B = 4.0\n• C+ = 3.5\n• C = 3.0\n• D+ = 2.5\n• D = 2.0\n• F = 0\n\nGPA = (Total Points × Credit Hours) ÷ Total Hours';
     }
-    if (lowerQuery.includes('prerequisite')) {
-      return 'Prerequisites are courses that must be completed successfully before registering for a specific course. You can find prerequisites for each course on the course details page.';
+    if (lowerMessage.includes('prerequisite') || lowerMessage.includes('requirement')) {
+      return 'Prerequisites are courses that must be completed before registering for a specific course.\n\nTo check prerequisites:\n1. Open the Courses page\n2. Click on a course to see details\n3. Prerequisites will be displayed if any';
     }
-    if (lowerQuery.includes('drop') || lowerQuery.includes('withdraw')) {
-      return 'You can drop a course during the add/drop period without any impact on your academic record. Withdrawal after this period will show as W on your transcript.';
+    if (lowerMessage.includes('advisor')) {
+      return 'The Academic Advisor is responsible for:\n• Approving registration requests\n• Providing academic advice\n• Monitoring your academic progress\n\nYou can contact your advisor through the system.';
     }
-    if (lowerQuery.includes('schedule') || lowerQuery.includes('class')) {
-      return 'You can view your weekly schedule from the "Weekly Schedule" page in your dashboard. It shows all registered courses with their times and rooms.';
+    if (lowerMessage.includes('schedule') || lowerMessage.includes('timetable')) {
+      return 'To view your class schedule:\n1. Go to "Schedule" from the sidebar\n2. Your weekly schedule will be displayed\n3. You can print or download the schedule';
     }
-    
-    return 'Thank you for reaching out! I\'m the smart assistant for the course registration system. I can help you with:\n- Course registration\n- GPA calculation\n- Prerequisites explanation\n- Schedule information\n\nHow can I assist you?';
+    return 'Thanks for your question! For better assistance, you can ask about:\n• Course registration\n• GPA calculation\n• Prerequisites\n• Class schedule\n\nOr contact technical support for more help.';
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const handleSend = async () => {
+    if (!input.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: input,
+      sender: 'user',
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+
+    // Simulate bot response delay
+    setTimeout(() => {
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: getBotResponse(input),
+        sender: 'bot',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, botResponse]);
+      setIsTyping(false);
+    }, 1000);
   };
 
   return (
     <>
       {/* Chat Button */}
-      <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 ${isRTL ? 'left-6' : 'right-6'} w-14 h-14 bg-primary-800 text-white rounded-full shadow-lg shadow-primary-800/30 flex items-center justify-center z-40 hover:bg-primary-700 transition-colors ${isOpen ? 'hidden' : ''}`}
-      >
-        <MessageCircle className="w-6 h-6" />
-      </motion.button>
+      <AnimatePresence>
+        {!isOpen && (
+          <motion.button
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            exit={{ scale: 0 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setIsOpen(true)}
+            className={`fixed ${isRTL ? 'left-6' : 'right-6'} bottom-6 z-50 w-14 h-14 bg-gradient-to-r from-primary-800 to-primary-600 text-white rounded-full shadow-lg shadow-primary-800/30 flex items-center justify-center hover:shadow-xl transition-shadow`}
+          >
+            <MessageCircle className="w-6 h-6" />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Chat Window */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 50 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 50 }}
-            className={`fixed bottom-6 ${isRTL ? 'left-6' : 'right-6'} w-[380px] max-w-[calc(100vw-3rem)] h-[500px] max-h-[calc(100vh-6rem)] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden`}
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ 
+              opacity: 1, 
+              y: 0, 
+              scale: 1,
+              height: isMinimized ? 'auto' : 500,
+            }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className={`fixed ${isRTL ? 'left-6' : 'right-6'} bottom-6 z-50 w-96 max-w-[calc(100vw-48px)] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col`}
           >
             {/* Header */}
-            <div className="bg-primary-800 text-white p-4 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary-800 to-primary-600 p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                  <Bot className="w-6 h-6" />
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Bot className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">{t('chatbot.title')}</h3>
-                  <p className="text-xs text-white/70">متصل الآن</p>
+                  <h3 className="font-bold text-white">
+                    {language === 'ar' ? 'المساعد الذكي' : 'Smart Assistant'}
+                  </h3>
+                  <p className="text-white/70 text-sm">
+                    {language === 'ar' ? 'متصل الآن' : 'Online now'}
+                  </p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex items-start gap-2 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
-                >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    message.role === 'user' 
-                      ? 'bg-secondary-500 text-primary-900' 
-                      : 'bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-400'
-                  }`}>
-                    {message.role === 'user' ? (
-                      <User className="w-4 h-4" />
-                    ) : (
-                      <Bot className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div className={`max-w-[80%] p-3 rounded-2xl ${
-                    message.role === 'user'
-                      ? 'bg-primary-800 text-white rounded-tr-none'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-tl-none'
-                  }`}>
-                    <p className="text-sm whitespace-pre-line">{message.content}</p>
-                    <p className={`text-xs mt-1 ${
-                      message.role === 'user' ? 'text-white/60' : 'text-gray-400'
-                    }`}>
-                      {message.timestamp.toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-              
-              {isLoading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex items-center gap-2"
-                >
-                  <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                    <Bot className="w-4 h-4 text-primary-800 dark:text-primary-400" />
-                  </div>
-                  <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-2xl rounded-tl-none">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-primary-800 dark:text-primary-400" />
-                      <span className="text-sm text-gray-500">{t('chatbot.thinking')}</span>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-              
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder={t('chatbot.placeholder')}
-                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-xl text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary-500"
-                />
                 <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
-                  className="w-10 h-10 bg-primary-800 text-white rounded-xl flex items-center justify-center hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  onClick={() => setIsMinimized(!isMinimized)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                 >
-                  <Send className="w-5 h-5" />
+                  {isMinimized ? (
+                    <Maximize2 className="w-5 h-5 text-white" />
+                  ) : (
+                    <Minimize2 className="w-5 h-5 text-white" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
                 </button>
               </div>
             </div>
+
+            {/* Messages */}
+            {!isMinimized && (
+              <>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {messages.map((message) => (
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`flex items-end gap-2 max-w-[85%] ${message.sender === 'user' ? 'flex-row-reverse' : ''}`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          message.sender === 'user' 
+                            ? 'bg-primary-100 dark:bg-primary-900/30' 
+                            : 'bg-secondary-100 dark:bg-secondary-900/30'
+                        }`}>
+                          {message.sender === 'user' ? (
+                            <User className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                          ) : (
+                            <Bot className="w-4 h-4 text-secondary-600 dark:text-secondary-400" />
+                          )}
+                        </div>
+                        <div className={`px-4 py-3 rounded-2xl ${
+                          message.sender === 'user'
+                            ? 'bg-primary-800 text-white rounded-br-none'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-bl-none'
+                        }`}>
+                          <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                  
+                  {isTyping && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex justify-start"
+                    >
+                      <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-4 py-3 rounded-2xl rounded-bl-none">
+                        <Loader2 className="w-4 h-4 animate-spin text-primary-600" />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {language === 'ar' ? 'جاري الكتابة...' : 'Typing...'}
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                  
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input */}
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                      placeholder={language === 'ar' ? 'اكتب رسالتك...' : 'Type your message...'}
+                      className="flex-1 px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 outline-none transition-colors"
+                    />
+                    <button
+                      onClick={handleSend}
+                      disabled={!input.trim()}
+                      className="w-12 h-12 bg-gradient-to-r from-primary-800 to-primary-600 text-white rounded-xl flex items-center justify-center hover:from-primary-700 hover:to-primary-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Send className={`w-5 h-5 ${isRTL ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -272,4 +264,3 @@ const ChatBot: React.FC = () => {
 };
 
 export default ChatBot;
-

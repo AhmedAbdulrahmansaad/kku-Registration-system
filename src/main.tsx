@@ -1,23 +1,22 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import App from './App'
-import { LanguageProvider } from './contexts/LanguageContext'
-import { ThemeProvider } from './contexts/ThemeContext'
-import { AuthProvider } from './contexts/AuthContext'
-import './index.css'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import { LanguageProvider } from './contexts/LanguageContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { AuthProvider } from './contexts/AuthContext';
+import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <LanguageProvider>
-        <ThemeProvider>
+      <ThemeProvider>
+        <LanguageProvider>
           <AuthProvider>
             <App />
           </AuthProvider>
-        </ThemeProvider>
-      </LanguageProvider>
+        </LanguageProvider>
+      </ThemeProvider>
     </BrowserRouter>
-  </React.StrictMode>,
-)
-
+  </React.StrictMode>
+);

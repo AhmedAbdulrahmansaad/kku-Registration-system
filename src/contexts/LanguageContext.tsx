@@ -1,15 +1,25 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { translations, Language, TranslationKey } from '../i18n/translations';
+import translations from '../i18n/translations';
+
+type Language = 'ar' | 'en';
 
 interface LanguageContextType {
   language: Language;
+  toggleLanguage: () => void;
   setLanguage: (lang: Language) => void;
-  t: (key: TranslationKey) => string;
-  dir: 'rtl' | 'ltr';
+  t: (key: string) => string;
   isRTL: boolean;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+
+export const useLanguage = () => {
+  const context = useContext(LanguageContext);
+  if (context === undefined) {
+    throw new Error('useLanguage must be used within a LanguageProvider');
+  }
+  return context;
+};
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
@@ -17,20 +27,35 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     return (saved as Language) || 'ar';
   });
 
-  const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    localStorage.setItem('language', lang);
+  useEffect(() => {
+    localStorage.setItem('language', language);
+    document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = language;
+    
+    // Update font based on language
+    if (language === 'ar') {
+      document.body.style.fontFamily = "'Cairo', 'Tajawal', sans-serif";
+    } else {
+      document.body.style.fontFamily = "'Inter', 'Poppins', sans-serif";
+    }
+  }, [language]);
+
+  const toggleLanguage = () => {
+    setLanguageState(prev => prev === 'ar' ? 'en' : 'ar');
   };
 
-  const t = (key: TranslationKey): string => {
-    const keys = key.split('.') as string[];
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+  };
+
+  const t = (key: string): string => {
+    const keys = key.split('.');
     let value: unknown = translations[language];
     
     for (const k of keys) {
       if (value && typeof value === 'object' && k in value) {
         value = (value as Record<string, unknown>)[k];
       } else {
-        console.warn(`Translation key not found: ${key}`);
         return key;
       }
     }
@@ -38,26 +63,17 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     return typeof value === 'string' ? value : key;
   };
 
-  const dir = language === 'ar' ? 'rtl' : 'ltr';
-  const isRTL = language === 'ar';
-
-  useEffect(() => {
-    document.documentElement.setAttribute('dir', dir);
-    document.documentElement.setAttribute('lang', language);
-  }, [language, dir]);
-
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, dir, isRTL }}>
+    <LanguageContext.Provider value={{
+      language,
+      toggleLanguage,
+      setLanguage,
+      t,
+      isRTL: language === 'ar',
+    }}>
       {children}
     </LanguageContext.Provider>
   );
 };
 
-export const useLanguage = (): LanguageContextType => {
-  const context = useContext(LanguageContext);
-  if (!context) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
-  }
-  return context;
-};
-
+export default LanguageContext;

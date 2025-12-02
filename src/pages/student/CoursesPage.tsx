@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  BookOpen, Search, Filter, Clock, User, MapPin,
-  CheckCircle, AlertCircle, Plus, X, ChevronDown
+import { motion } from 'framer-motion';
+import {
+  BookOpen, Search, Filter, ChevronDown, Clock,
+  CheckCircle, AlertCircle, Users, Calendar, Plus
 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { getCourses, getEnrollments, createRequest } from '../../lib/supabase';
+import { supabase, getCourses, getEnrollments, createRequest } from '../../lib/supabase';
 import { Course, Enrollment } from '../../types';
 
 const CoursesPage: React.FC = () => {
@@ -16,9 +16,8 @@ const CoursesPage: React.FC = () => {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState<number | 'all'>('all');
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [registering, setRegistering] = useState(false);
+  const [levelFilter, setLevelFilter] = useState<string>('all');
+  const [registering, setRegistering] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -27,7 +26,7 @@ const CoursesPage: React.FC = () => {
       
       try {
         const [coursesData, enrollmentsData] = await Promise.all([
-          getCourses(user.level || 8),
+          getCourses(),
           getEnrollments(user.id),
         ]);
         
@@ -44,60 +43,65 @@ const CoursesPage: React.FC = () => {
   }, [user]);
 
   const isRegistered = (courseId: string) => {
-    return enrollments.some(e => 
-      e.course_id === courseId && 
-      ['pending', 'approved', 'current'].includes(e.status)
-    );
+    return enrollments.some(e => e.course_id === courseId && (e.status === 'current' || e.status === 'completed'));
   };
 
-  const isCompleted = (courseCode: string) => {
-    return enrollments.some(e => 
-      e.course?.course_code === courseCode && 
-      e.status === 'completed'
-    );
-  };
-
-  const hasPrerequisites = (course: Course) => {
-    if (!course.prerequisites || course.prerequisites.length === 0) return true;
-    return course.prerequisites.every(prereq => isCompleted(prereq));
+  const isPending = (courseId: string) => {
+    return enrollments.some(e => e.course_id === courseId && e.status === 'pending');
   };
 
   const handleRegister = async (course: Course) => {
-    if (!user || !user.advisor_id) {
-      setMessage({ type: 'error', text: 'لم يتم تعيين مشرف أكاديمي لك' });
-      return;
-    }
+    if (!user) return;
+    
+    setRegistering(course.id);
+    setMessage(null);
 
-    if (isRegistered(course.id)) {
-      setMessage({ type: 'error', text: t('courses.alreadyRegistered') });
-      return;
-    }
-
-    if (!hasPrerequisites(course)) {
-      setMessage({ type: 'error', text: t('courses.prerequisiteNotMet') });
-      return;
-    }
-
-    setRegistering(true);
     try {
+      // Check prerequisites
+      if (course.prerequisites && course.prerequisites.length > 0) {
+        const completedCourses = enrollments
+          .filter(e => e.status === 'completed')
+          .map(e => e.course?.course_code);
+        
+        const missingPrereqs = course.prerequisites.filter(p => !completedCourses?.includes(p));
+        
+        if (missingPrereqs.length > 0) {
+          setMessage({
+            type: 'error',
+            text: language === 'ar' 
+              ? `المتطلبات السابقة غير مكتملة: ${missingPrereqs.join(', ')}`
+              : `Missing prerequisites: ${missingPrereqs.join(', ')}`
+          });
+          return;
+        }
+      }
+
+      // Create registration request
       await createRequest({
         student_id: user.id,
         course_id: course.id,
-        advisor_id: user.advisor_id,
-        request_type: 'enroll',
+        request_type: 'registration',
+        status: 'pending',
       });
-      
-      setMessage({ type: 'success', text: t('courses.registerSuccess') });
-      setSelectedCourse(null);
-      
+
+      setMessage({
+        type: 'success',
+        text: language === 'ar' 
+          ? 'تم إرسال طلب التسجيل للمرشد الأكاديمي'
+          : 'Registration request sent to academic advisor'
+      });
+
       // Refresh enrollments
-      const enrollmentsData = await getEnrollments(user.id);
-      setEnrollments(enrollmentsData || []);
+      const updatedEnrollments = await getEnrollments(user.id);
+      setEnrollments(updatedEnrollments || []);
     } catch (error) {
       console.error('Error registering:', error);
-      setMessage({ type: 'error', text: t('common.error') });
+      setMessage({
+        type: 'error',
+        text: language === 'ar' ? 'حدث خطأ أثناء التسجيل' : 'Error during registration'
+      });
     } finally {
-      setRegistering(false);
+      setRegistering(null);
     }
   };
 
@@ -107,26 +111,22 @@ const CoursesPage: React.FC = () => {
       course.name_en.toLowerCase().includes(searchTerm.toLowerCase()) ||
       course.course_code.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesLevel = selectedLevel === 'all' || course.level === selectedLevel;
+    const matchesLevel = levelFilter === 'all' || course.level === Number(levelFilter);
     
     return matchesSearch && matchesLevel;
   });
 
-  const getDayName = (day: string) => {
-    const days: Record<string, string> = {
-      sunday: t('courses.days.sunday'),
-      monday: t('courses.days.monday'),
-      tuesday: t('courses.days.tuesday'),
-      wednesday: t('courses.days.wednesday'),
-      thursday: t('courses.days.thursday'),
-    };
-    return days[day] || day;
-  };
+  const groupedCourses = filteredCourses.reduce((acc, course) => {
+    const level = course.level;
+    if (!acc[level]) acc[level] = [];
+    acc[level].push(course);
+    return acc;
+  }, {} as Record<number, Course[]>);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="spinner" />
+        <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-800 rounded-full animate-spin" />
       </div>
     );
   }
@@ -134,50 +134,36 @@ const CoursesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {t('courses.available')}
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            {language === 'ar' 
-              ? `المقررات المتاحة للمستوى ${user?.level} وما قبله`
-              : `Courses available for level ${user?.level} and below`
-            }
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          {t('nav.courses')}
+        </h1>
+        <p className="text-gray-500 dark:text-gray-400">
+          {language === 'ar' ? 'اختر المقررات التي تريد تسجيلها' : 'Choose the courses you want to register'}
+        </p>
       </div>
 
       {/* Message */}
-      <AnimatePresence>
-        {message && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className={`p-4 rounded-xl flex items-center gap-3 ${
-              message.type === 'success'
-                ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800'
-                : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
-            }`}
-          >
-            {message.type === 'success' ? (
-              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-            )}
-            <p className={message.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-              {message.text}
-            </p>
-            <button
-              onClick={() => setMessage(null)}
-              className="mr-auto"
-            >
-              <X className="w-5 h-5 text-gray-400" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {message && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`p-4 rounded-xl flex items-center gap-3 ${
+            message.type === 'success'
+              ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
+          }`}
+        >
+          {message.type === 'success' ? (
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+          )}
+          <p className={message.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+            {message.text}
+          </p>
+        </motion.div>
+      )}
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-lg flex flex-col md:flex-row gap-4">
@@ -187,22 +173,22 @@ const CoursesPage: React.FC = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={t('common.search')}
-            className="input-primary pr-12"
+            placeholder={language === 'ar' ? 'البحث عن مقرر...' : 'Search for a course...'}
+            className="w-full px-4 py-3 pr-12 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none"
           />
         </div>
         
         <div className="relative">
           <Filter className="absolute top-1/2 -translate-y-1/2 right-4 w-5 h-5 text-gray-400" />
           <select
-            value={selectedLevel}
-            onChange={(e) => setSelectedLevel(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            className="input-primary pr-12 appearance-none min-w-[200px]"
+            value={levelFilter}
+            onChange={(e) => setLevelFilter(e.target.value)}
+            className="w-full md:w-48 px-4 py-3 pr-12 border-2 border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all outline-none appearance-none"
           >
-            <option value="all">{t('common.all')} المستويات</option>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((level) => (
+            <option value="all">{language === 'ar' ? 'جميع المستويات' : 'All Levels'}</option>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(level => (
               <option key={level} value={level}>
-                المستوى {level}
+                {language === 'ar' ? `المستوى ${level}` : `Level ${level}`}
               </option>
             ))}
           </select>
@@ -210,191 +196,120 @@ const CoursesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Courses Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCourses.map((course, index) => {
-          const registered = isRegistered(course.id);
-          const completed = isCompleted(course.course_code);
-          const hasPrereq = hasPrerequisites(course);
-
-          return (
-            <motion.div
-              key={course.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className={`bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden ${
-                completed ? 'opacity-60' : ''
-              }`}
-            >
-              {/* Card Header */}
-              <div className="bg-gradient-to-r from-primary-800 to-primary-600 p-4 text-white">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full">
-                      {course.course_code}
-                    </span>
-                    <h3 className="font-bold mt-2">
-                      {language === 'ar' ? course.name_ar : course.name_en}
-                    </h3>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold">{course.credit_hours}</p>
-                    <p className="text-xs text-white/70">{t('courses.creditHours')}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card Body */}
-              <div className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <User className="w-4 h-4" />
-                  <span>{course.instructor_name}</span>
-                </div>
-
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <Clock className="w-4 h-4" />
-                  <span>
-                    {course.schedule?.days?.map(d => getDayName(d)).join(', ')} | {course.schedule?.start_time} - {course.schedule?.end_time}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <MapPin className="w-4 h-4" />
-                  <span>{course.room_number}</span>
-                </div>
-
-                {/* Prerequisites */}
-                {course.prerequisites && course.prerequisites.length > 0 && (
-                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      {t('courses.prerequisites')}:
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {course.prerequisites.map((prereq, i) => (
-                        <span
-                          key={i}
-                          className={`text-xs px-2 py-0.5 rounded ${
-                            isCompleted(prereq)
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                              : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                          }`}
-                        >
-                          {prereq}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Status */}
-                <div className="pt-2">
-                  {completed ? (
-                    <span className="badge-success flex items-center gap-1 w-fit">
-                      <CheckCircle className="w-4 h-4" />
-                      {t('courses.completed')}
-                    </span>
-                  ) : registered ? (
-                    <span className="badge-info flex items-center gap-1 w-fit">
-                      <CheckCircle className="w-4 h-4" />
-                      {t('courses.registered')}
-                    </span>
-                  ) : !hasPrereq ? (
-                    <span className="badge-warning flex items-center gap-1 w-fit">
-                      <AlertCircle className="w-4 h-4" />
-                      {t('courses.prerequisiteNotMet')}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Card Footer */}
-              <div className="p-4 pt-0">
-                <button
-                  onClick={() => setSelectedCourse(course)}
-                  disabled={completed || registered || !hasPrereq}
-                  className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
-                    completed || registered || !hasPrereq
-                      ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                      : 'bg-primary-800 text-white hover:bg-primary-700'
-                  }`}
-                >
-                  <Plus className="w-5 h-5" />
-                  {t('courses.register')}
-                </button>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {/* No Results */}
-      {filteredCourses.length === 0 && (
-        <div className="text-center py-12">
+      {/* Courses List */}
+      {Object.keys(groupedCourses).length === 0 ? (
+        <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-lg">
           <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500 dark:text-gray-400">{t('common.noData')}</p>
         </div>
+      ) : (
+        <div className="space-y-8">
+          {Object.entries(groupedCourses)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([level, levelCourses]) => (
+              <motion.div
+                key={level}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center">
+                    <span className="text-primary-600 dark:text-primary-400 font-bold">{level}</span>
+                  </div>
+                  {language === 'ar' ? `المستوى ${level}` : `Level ${level}`}
+                </h2>
+                
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {levelCourses.map((course, index) => {
+                    const registered = isRegistered(course.id);
+                    const pending = isPending(course.id);
+                    
+                    return (
+                      <motion.div
+                        key={course.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className={`bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 ${
+                          registered ? 'ring-2 ring-green-500' : pending ? 'ring-2 ring-yellow-500' : ''
+                        }`}
+                      >
+                        <div className="p-6">
+                          {/* Course Code Badge */}
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 px-3 py-1 rounded-lg text-sm font-semibold">
+                              {course.course_code}
+                            </span>
+                            {registered && (
+                              <span className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-3 py-1 rounded-lg text-sm font-semibold flex items-center gap-1">
+                                <CheckCircle className="w-4 h-4" />
+                                {language === 'ar' ? 'مسجل' : 'Registered'}
+                              </span>
+                            )}
+                            {pending && (
+                              <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 px-3 py-1 rounded-lg text-sm font-semibold flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {t('common.pending')}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Course Name */}
+                          <h3 className="font-bold text-gray-900 dark:text-white mb-2 line-clamp-2">
+                            {language === 'ar' ? course.name_ar : course.name_en}
+                          </h3>
+
+                          {/* Course Details */}
+                          <div className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4" />
+                              <span>{course.credit_hours} {t('courses.creditHours')}</span>
+                            </div>
+                            {course.instructor && (
+                              <div className="flex items-center gap-2">
+                                <Users className="w-4 h-4" />
+                                <span>{course.instructor}</span>
+                              </div>
+                            )}
+                            {course.prerequisites && course.prerequisites.length > 0 && (
+                              <div className="flex items-start gap-2">
+                                <AlertCircle className="w-4 h-4 mt-0.5 text-orange-500" />
+                                <span className="text-orange-600 dark:text-orange-400">
+                                  {language === 'ar' ? 'متطلبات: ' : 'Prerequisites: '}
+                                  {course.prerequisites.join(', ')}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Register Button */}
+                          {!registered && !pending && (
+                            <button
+                              onClick={() => handleRegister(course)}
+                              disabled={registering === course.id}
+                              className="w-full mt-4 bg-gradient-to-r from-primary-800 to-primary-700 text-white py-3 rounded-xl font-semibold hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg disabled:opacity-70 flex items-center justify-center gap-2"
+                            >
+                              {registering === course.id ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              ) : (
+                                <>
+                                  <Plus className="w-5 h-5" />
+                                  {t('courses.register')}
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            ))}
+        </div>
       )}
-
-      {/* Registration Modal */}
-      <AnimatePresence>
-        {selectedCourse && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setSelectedCourse(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                تأكيد التسجيل
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                هل أنت متأكد من تسجيل المقرر التالي؟
-              </p>
-
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 mb-6">
-                <p className="font-bold text-gray-900 dark:text-white">
-                  {language === 'ar' ? selectedCourse.name_ar : selectedCourse.name_en}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {selectedCourse.course_code} • {selectedCourse.credit_hours} ساعات
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setSelectedCourse(null)}
-                  className="flex-1 btn-outline"
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  onClick={() => handleRegister(selectedCourse)}
-                  disabled={registering}
-                  className="flex-1 btn-primary"
-                >
-                  {registering ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                  ) : (
-                    t('courses.register')
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
 
 export default CoursesPage;
-

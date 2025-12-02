@@ -1,28 +1,17 @@
-// User Types
-export type UserRole = 'student' | 'advisor' | 'admin';
-
 export interface User {
   id: string;
   email: string;
   full_name: string;
-  role: UserRole;
-  student_id: string | null;
-  major: string | null;
-  level: number | null;
-  advisor_id: string | null;
-  avatar_url?: string;
+  role: 'student' | 'advisor' | 'admin';
+  student_id?: string;
+  major?: string;
+  level?: number;
   phone?: string;
+  address?: string;
+  gpa?: number;
+  advisor_id?: string;
   created_at: string;
-  updated_at: string;
-}
-
-// Course Types
-export type Semester = 'fall' | 'spring' | 'summer';
-
-export interface Schedule {
-  days: string[];
-  start_time: string;
-  end_time: string;
+  updated_at?: string;
 }
 
 export interface Course {
@@ -30,62 +19,52 @@ export interface Course {
   course_code: string;
   name_ar: string;
   name_en: string;
-  description_ar: string;
-  description_en: string;
+  description_ar?: string;
+  description_en?: string;
   credit_hours: number;
   level: number;
   major: string;
-  semester: Semester;
-  prerequisites: string[];
-  instructor_name: string;
-  schedule: Schedule;
-  room_number: string;
-  max_students: number;
-  enrolled_count: number;
+  prerequisites?: string[];
+  semester?: string;
+  instructor?: string;
+  schedule_days?: string[];
+  schedule_time?: string;
+  room_number?: string;
+  capacity?: number;
   created_at: string;
+  updated_at?: string;
 }
-
-// Enrollment Types
-export type EnrollmentStatus = 'pending' | 'approved' | 'rejected' | 'completed' | 'current';
-export type GradeType = 'A+' | 'A' | 'B+' | 'B' | 'C+' | 'C' | 'D+' | 'D' | 'F' | null;
 
 export interface Enrollment {
   id: string;
-  student_id: string;
+  user_id: string;
   course_id: string;
+  status: 'current' | 'completed' | 'dropped' | 'pending';
+  grade?: string;
+  gpa_points?: number;
   semester: string;
   year: number;
-  status: EnrollmentStatus;
-  grade: GradeType;
-  gpa_points: number | null;
-  approval_date: string | null;
-  rejection_reason: string | null;
   created_at: string;
+  updated_at?: string;
   course?: Course;
-  student?: User;
+  user?: User;
 }
-
-// Request Types
-export type RequestType = 'enroll' | 'drop' | 'withdraw';
-export type RequestStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Request {
   id: string;
   student_id: string;
   course_id: string;
-  advisor_id: string;
-  status: RequestStatus;
-  request_type: RequestType;
-  notes: string | null;
-  advisor_notes: string | null;
+  advisor_id?: string;
+  request_type: 'registration' | 'drop' | 'override';
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason?: string;
+  response_date?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
   course?: Course;
   student?: User;
+  advisor?: User;
 }
-
-// Notification Types
-export type NotificationType = 'info' | 'success' | 'warning' | 'error';
 
 export interface Notification {
   id: string;
@@ -94,41 +73,13 @@ export interface Notification {
   title_en: string;
   message_ar: string;
   message_en: string;
-  type: NotificationType;
+  type: 'info' | 'success' | 'warning' | 'error';
   is_read: boolean;
   created_at: string;
 }
 
-// GPA Calculation
-export const GRADE_POINTS: Record<string, number> = {
-  'A+': 5.0,
-  'A': 4.75,
-  'B+': 4.5,
-  'B': 4.0,
-  'C+': 3.5,
-  'C': 3.0,
-  'D+': 2.5,
-  'D': 2.0,
-  'F': 0.0,
-};
-
-// Stats Types
-export interface DashboardStats {
-  totalStudents?: number;
-  totalCourses?: number;
-  pendingRequests?: number;
-  approvedRequests?: number;
-  currentGPA?: number;
-  completedCredits?: number;
-  currentCredits?: number;
-  totalCredits?: number;
+export interface SystemSettings {
+  setting_key: string;
+  setting_value: unknown;
+  updated_at: string;
 }
-
-// Chat Message Types
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
-
